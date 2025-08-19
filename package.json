@@ -1,0 +1,17 @@
+{
+    "name": "llm-job-copilot",
+    "private": true,
+    "workspaces": [
+        "apps/*",
+        "packages/*",
+        "workers/*"
+    ],
+    "scripts": {
+        "dev:web": "pnpm --filter web dev",
+        "build:web": "pnpm --filter web build",
+        "start:web": "pnpm --filter web start",
+        "lint": "echo \"(TODO: add linter)\" && exit 0",
+        "typecheck": "echo \"(TODO: add type checker)\" && exit 0",
+        "test": "echo \"(TODO: add tests)\" && exit 0"
+    }
+}

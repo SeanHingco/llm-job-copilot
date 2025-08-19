@@ -1,0 +1,1 @@
+Stores Prompt Templates
