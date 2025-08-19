@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, HttpUrl
 import httpx
+from bs4 import BeautifulSoup
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -26,15 +27,35 @@ async def ingest(request: IngestRequest):
             headers={"User-Agent": UA},
         ) as client:
             resp = await client.get(str(request.url))
+            ctype = resp.headers.get("content-type", "").lower()
+            if resp.status_code != 200 or "text/html" not in ctype:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Expected HTML 200, got {resp.status_code} {ctype}",
+                )
+            final_url = str(resp.url)
+            # create parser
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            title = (soup.title.string or "").strip() if (soup.title and soup.title.string) else ""
+            # drop non-content tags
+            for tag in soup(['script', 'style', 'noscript', 'template']):
+                tag.decompose()
+            
+            # extract any visible text
+            raw = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
+            text = " ".join(raw.split())
+            preview = text[:500]
     except httpx.RequestError as e:
         raise HTTPException(status_code=400, detail=f"Fetch failed: {e}") from e
 
     return {
         "status": "fetched",
         "url": str(request.url),
+        "final_url": final_url,
         "http_status": resp.status_code,
         "content_type": resp.headers.get("content-type", ""),
         "text_length": len(resp.text),
-        "preview": resp.text[:200],
+        "title": title,
+        "preview": preview,
     }
     
