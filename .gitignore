@@ -1,0 +1,22 @@
+# Node/next.js
+node_modules/
+.next/
+dist/
+out/
+
+# Python/FastAPI
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage/testing
+coverage/
+.pytest_cache/
