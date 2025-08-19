@@ -9,6 +9,10 @@ __pycache__/
 *.pyc
 .venv/
 .env
+# keep .env.example for reference
+!.env.example
+!*/.env.example
+!*/apps/web/.env.example
 
 # OS cruft
 .DS_Store
