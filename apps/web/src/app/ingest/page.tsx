@@ -94,6 +94,9 @@ export default function IngestPage() {
                         <span className="font-medium">Text length:</span> {data.text_length}
                     </div>
                     <pre className="text-xs text-gray-600 whitespace-pre-wrap">{data.preview}</pre>
+                    <div className="text-sm text-gray-600">
+                        <span className="font-medium">Chunks:</span> {(data as any).chunk_count ?? "—"}
+                    </div>
                 </div>
             )}
         </main>
