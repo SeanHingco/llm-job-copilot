@@ -18,6 +18,13 @@ def chunk_text(text: str, size: int=1200, overlap: int=200) -> List[str]:
     # loop over chunks
     while start < n:
         end = min(start + size, n)
+
+        if end < n:
+            window_start = max(start + size - 100, start)
+            snap = text.rfind(" ", window_start, end)
+            if snap != -1 and snap > start + 20:
+                end = snap
+
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
