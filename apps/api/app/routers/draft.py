@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Form, UploadFile, File
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 from pathlib import Path
@@ -6,6 +6,7 @@ from pathlib import Path
 from app.utils.llm import generate_text
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
+from app.routers.resume import extract_resume as extract_route
 
 import httpx
 import os
@@ -62,7 +63,7 @@ async def draft_run(req: DraftReq):
     result = await ingest_route(ingest_payload)
 
     # you can keep using the preview for now; later we can pass a larger budgeted context
-    context = result.get("context_preview") or ""
+    context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
     template = load_template()
     prompt = template.format(job_title=job_title, context=context, resume=req.resume or "")
@@ -96,3 +97,32 @@ async def draft_run(req: DraftReq):
             "title_from_page": result.get("title"),
         },
     }
+
+@router.post("/run-form")
+async def draft_run_form(
+    url: HttpUrl = Form(...),
+    q: Optional[str] = Form(None),
+    job_title: Optional[str] = Form(None),
+    resume: Optional[str] = Form(""),
+    resume_file: UploadFile | None = File(None),
+):
+    if resume_file:
+        print("ayo we found that bih")
+        extracted = await extract_route(resume_file)
+        resume_text = extracted["text"] or ""
+    else:
+        print("didnt find no resume bro bro")
+        resume_text = resume or ""
+    
+    req = DraftReq(
+        url=url,
+        q=q,
+        job_title=job_title,
+        resume=resume_text
+    )
+
+    bullets = await draft_run(req)
+    return bullets
+
+    
+
