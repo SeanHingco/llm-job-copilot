@@ -2,6 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import ingest
+from .routers import draft
+from .routers import resume
 
 app = FastAPI(title="LLM Job Copilot API")
 
@@ -19,3 +21,7 @@ def health():
     return {"ok": True}
 
 app.include_router(ingest.router)
+
+app.include_router(draft.router)
+
+app.include_router(resume.router)
