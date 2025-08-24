@@ -8,6 +8,7 @@ export default function DraftPage() {
     const[jobTitle, setJobTitle] = useState<string>("");
     const[resumeText, setResumeText] = useState("");
     const[resumeFile, setResumeFile] = useState<File | null>(null);
+    const[task, setTask] = useState<"bullets" | "talking_points" | "cover_letter" | "alignment">("cover_letter");
     const[status, setStatus] = useState<string>("");
     const[error, setError] = useState<string>("");
     const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -107,6 +108,7 @@ export default function DraftPage() {
         try {
             const fd = new FormData();
             fd.append("url", url);
+            fd.append("task", task);
             if (q) {fd.append("q", q);};
             if (jobTitle) {fd.append("job_title", jobTitle);};
             
@@ -141,7 +143,7 @@ export default function DraftPage() {
     return (
         <main className="p-8 space-y-4">
             <div className="max-w-3xl mx-auto px-4">
-                <h1 className="text-2xl font-bold">Get Resume Recs</h1>
+                <h1 className="text-2xl font-bold">Resume Bender</h1>
                 <div className="bg-white border rounded-2xl shadow-sm p-6">
                     <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>
                         <label htmlFor="url" className={labelBase}>Job URL</label>
@@ -212,7 +214,7 @@ export default function DraftPage() {
                         <button 
                             type="button" 
                             onClick={onGenerateAll}
-                            className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="inline-flex justify-center items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={isGenerating || !url}>
                             {isGenerating ? "Generating…" : "Get Resume Insights"}
                         </button>

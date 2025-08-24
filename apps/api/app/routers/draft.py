@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Form, UploadFile, File
 from pydantic import BaseModel, HttpUrl
-from typing import Optional
+from typing import Optional, Literal
 from pathlib import Path
 
 from app.utils.llm import generate_text
@@ -10,26 +10,42 @@ from app.routers.resume import extract_resume as extract_route
 
 import httpx
 import os
+from pathlib import Path
 
 router = APIRouter(prefix="/draft", tags=["draft"])
+Task = Literal["bullets", "talking_points", "cover_letter", "alignment"]
+PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 
 class DraftReq(BaseModel):
+    task: Task="bullets"
     url: HttpUrl
     q: Optional[str] = None
     job_title: Optional[str] = None
     resume: Optional[str] = ""
 
-
-def load_template() -> str:
-    p = Path(__file__).resolve().parents[4] / "ml" / "prompts" / "draft_prompt.md"
+def load_task_template(task: str) -> str:
+    p = PROMPT_DIR / f"{task}.md"
     if p.exists():
         return p.read_text(encoding="utf-8")
     # fallback
-    return (
-        "# System\nYou write concise, achievement-focused resume bullets using only the provided context.\n\n"
-        "# Inputs\nJob Title: {job_title}\nContext:\n{context}\n\nCandidate Resume:\n{resume}\n\n"
-        "# Output\n- Bullets only, one per line."
-    )
+    if task == "bullets":
+        return (
+            "# System\nYou help a candidate land interviews by producing concise, achievement-focused resume bullets tailored to the job.\n\n"
+            "# Rules\n- Exactly 6 bullets, 14–24 words each.\n- Start with a strong verb; no 'I'.\n"
+            "- Rewrite using job language; do not copy 5+ words from inputs.\n- Prefer real metrics; don't invent numbers.\n"
+            "- Align each bullet to a different requirement from Context. Cite job chunk indices like [0], [2] when relevant.\n\n"
+            "# Inputs\nJob Title: {job_title}\nContext:\n{context}\n\nCandidate Resume:\n{resume}\n\n"
+            "# Output\nBullets only, one per line (exactly 6)."
+        )
+    if task == "talking_points":
+        return (
+            "# System\nYou produce concise talking points for a cover letter or interview.\n\n"
+            "# Rules\n- Return 6–8 points, 10–20 words each.\n- Paraphrase using the job’s language; no verbatim copying.\n"
+            "- Use resume facts as evidence; don’t invent numbers.\n- Include relevant job keywords naturally.\n\n"
+            "# Inputs\nJob Title: {job_title}\nContext:\n{context}\n\nCandidate Resume:\n{resume}\n\n"
+            "# Output\nPoints only, one per line."
+        )
+    raise HTTPException(status_code=400, detail=f"Task '{task}' not implemented yet.")
 
 @router.post("")
 async def draft(req: DraftReq):
@@ -39,7 +55,7 @@ async def draft(req: DraftReq):
 
     context = result.get("context_preview") or ""
     filled_title = req.job_title or result.get("title") or ""
-    template = load_template()
+    template = load_task_template(req.task)
     prompt = template.format(
         job_title=filled_title,
         context=context,
@@ -65,7 +81,7 @@ async def draft_run(req: DraftReq):
     # you can keep using the preview for now; later we can pass a larger budgeted context
     context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
-    template = load_template()
+    template = load_task_template(req.task)
     prompt = template.format(job_title=job_title, context=context, resume=req.resume or "")
 
     # call model via provider-agnostic helper
@@ -105,6 +121,7 @@ async def draft_run_form(
     job_title: Optional[str] = Form(None),
     resume: Optional[str] = Form(""),
     resume_file: UploadFile | None = File(None),
+    task: Task = Form("bullets"),
 ):
     if resume_file:
         print("ayo we found that bih")
@@ -115,6 +132,7 @@ async def draft_run_form(
         resume_text = resume or ""
     
     req = DraftReq(
+        task=task,
         url=url,
         q=q,
         job_title=job_title,
