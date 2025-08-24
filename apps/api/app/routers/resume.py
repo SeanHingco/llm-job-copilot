@@ -72,6 +72,7 @@ async def extract_resume(file: UploadFile=File(...)):
         "head_preview_text": head_preview_text,
         "preview": preview,
         "text_length": text_length,
+        "text": text,
         "probably_scanned": probably_scanned
     }
 
