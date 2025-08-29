@@ -1,8 +1,17 @@
 "use client"
 import {useState, useEffect} from "react";
+import { apiFetch } from '@/lib/api';
+import CreditBadge from 'components/CreditBadge'
+import SignOutButton from "components/SignOutButton";
+import { useRequireAuth } from "@/lib/RequireAuth";
+import { supabase } from '@/lib/supabaseClient';
+import ChangePasswordForm from "components/ChangePasswordForm";
+import Link from 'next/link'
 
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
+
+type Meta = { remaining_credits?: number };
 
 type BulletsJSON = { bullets: { text: string; job_chunks?: number[] }[] };
 
@@ -43,12 +52,33 @@ type RunFormResponse = {
   meta?: Record<string, unknown>;
 };
 
+// helpers
 const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "bullets",         label: "Resume Bullets" },
   { key: "talking_points",  label: "Talking Points" },
   { key: "cover_letter",    label: "Cover Letter" },
   { key: "alignment",       label: "Alignment" },
 ];
+
+function errorToMessage(status: number, body: any): string {
+  const detailText = asText(body?.detail ?? body?.message ?? body?.error ?? "");
+
+  if (status === 401) return detailText || "You’re signed out. Please sign in.";
+  if (status === 402) return detailText || "You’re out of credits. Upgrade to continue.";
+  if (status === 0)   return "Network error. Check your connection and try again.";
+  if (status >= 500)  return "Something went wrong on our side. Please try again.";
+
+  if (status >= 400)  return detailText || `Request failed (${status}).`;
+  return detailText || "Unexpected error.";
+}
+
+function asText(x: any): string {
+  if (x == null) return "";
+  if (typeof x === "string") return x;
+  if (typeof x?.message === "string") return x.message;
+  if (typeof x?.detail === "string") return x.detail;
+  try { return JSON.stringify(x); } catch { return String(x); }
+}
 
 // type guarding
 function isBullets(j: AnyJSON): j is BulletsJSON {
@@ -90,6 +120,18 @@ export default function DraftPage() {
     } | null>(null);
     const [results, setResults] = useState<Partial<Record<Task, TaskResult>>>({});
     const [taskStatus, setTaskStatus] = useState<Partial<Record<Task, TaskStatus>>>({});
+    const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
+    const [credits, setCredits] = useState<number | undefined>(undefined);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data }) => {
+            console.log('[draft] session?', !!data.session, data.session?.user?.email)
+        })
+    }, [])
+
+    // check auth
+    const { ready } = useRequireAuth()
+    if (!ready) return null;
 
     function setPhase(t: Task, phase: TaskPhase, message?: string) {
         setTaskStatus(prev => ({ ...prev, [t]: { phase, message } }));
@@ -116,72 +158,68 @@ export default function DraftPage() {
 
     async function onExtract() {
         setError(""); setStatus(""); setProbablyScanned(false);
-        if (!resumeFile) {
-            setError("Select a .pdf or .txt first.");
-            return;
-        }
+        if (!resumeFile) { setError("Select a .pdf or .txt first."); return; }
+
         setIsExtracting(true);
         try {
             const fd = new FormData();
             fd.append("file", resumeFile);
 
-            const res = await fetch(`${API}/resume/extract`, {
-                method: 'POST',
-                body: fd
+            const res = await apiFetch(`/resume/extract`, {
+            method: 'POST',
+            body: fd
             });
 
+            const data: any = (res as any).data || null;
+
             if (!res.ok) {
-                const body = await res.text().catch(() => "");
-                setError(body || `Extract failed (${res.status})`);
-                return;
+            const msg = data?.detail || `Extract failed (${res.status})`;
+            setError(msg);
+            return;
             }
 
-            const json = await res.json();
-            setResumeText(json.text ?? "");
-            setStatus(`Extracted • ${json.text_length ?? 0} chars`);
-            setProbablyScanned(Boolean(json.probably_scanned));
+            setResumeText(data?.text ?? "");
+            setStatus(`Extracted • ${data?.text_length ?? 0} chars`);
+            setProbablyScanned(Boolean(data?.probably_scanned));
         } catch (e: any){
             setError(e?.message || "Network error");
         } finally {
             setIsExtracting(false);
         }
-    };
+    }
 
     async function onGenerate() {
         setGenError(""); setBullets("");
-
-        if (!url) {
-            setGenError("Enter a job URL first.");
-            return;
-        }
+        if (!url) { setGenError("Enter a job URL first."); return; }
 
         setIsGenerating(true);
         try {
-            const body = {
-                url,
-                q: q || null,
-                job_title: jobTitle || null,
-                resume: resumeText || ""
-            }
+            const body = { url, q: q || null, job_title: jobTitle || null, resume: resumeText || "" };
 
-            const res = await fetch(`${API}/draft/run`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(body),
+            const res = await apiFetch(`/draft/run`, {       // <-- remove ${API}
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
             });
 
+            const data: any = (res as any).data || null;     // <-- read once
+
+            // update credits if present
+            const nextCredits = data?.meta?.remaining_credits;
+            if (typeof nextCredits === 'number') setCredits(nextCredits);
+
             if (!res.ok) {
-                let msg = `Generate failed (${res.status})`;
-                try {
-                    const err = await res.json();
-                    msg = err.detail || msg;
-                } catch {}
-                setGenError(msg);
+                // optional: show upgrade banner on 402
+                if (res.status === 402) {
+                    setUpgradeMsg(
+                        asText(data?.detail ?? data) || "You’re out of credits. Upgrade to continue."
+                    );
+                    }
+                    setGenError(errorToMessage(res.status, data));
                 return;
             }
 
-            const json = await res.json();
-            setBullets(json.bullets ?? "");
+            setBullets(data?.bullets ?? "");
         } catch (e: any){
             setGenError(e?.message || "Network error");
         } finally {
@@ -191,86 +229,84 @@ export default function DraftPage() {
 
     async function onGenerateAll() {
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
-        setTaskStatus(
-            Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }]))
-        );
+        setTaskStatus(Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }])));
 
-        if (!url) {
-            setGenError("Enter a job URL first.");
+        if (!url) { setGenError("Enter a job URL first."); return; }
+        if (selectedTasks.length === 0) { setGenError("Select at least one task."); return; }
+
+        if (credits === 0) {
+            const msg = "You’re out of credits. Upgrade to continue.";
+            setUpgradeMsg(msg);
+            setGenError(msg);
             return;
         }
 
-        const taskToRun = pickTaskToRun();
-        if (!taskToRun) {
-            setGenError("Select at least one task.");
-            return;
-        }
-
-        if (selectedTasks.length === 0) {
-            setGenError("Select at least one task.");
-            return;
-        }
-
+        setUpgradeMsg(null);
         setIsGenerating(true);
         try {
             for (const taskToRun of selectedTasks) {
-                const fd = new FormData();
-                fd.append("url", url);
-                fd.append("task", taskToRun);
-                if (q) {fd.append("q", q);};
-                if (jobTitle) {fd.append("job_title", jobTitle);};
-                if (resumeFile) {fd.append("resume_file", resumeFile);}
-                else if (resumeText) {fd.append("resume", resumeText);};
+            const fd = new FormData();
+            fd.append("url", url);
+            fd.append("task", taskToRun);
+            if (q) fd.append("q", q);
+            if (jobTitle) fd.append("job_title", jobTitle);
+            if (resumeFile) fd.append("resume_file", resumeFile);
+            else if (resumeText) fd.append("resume", resumeText);
 
-                setPhase(taskToRun, "running");
-                const res = await fetch(`${API}/draft/run-form`, {
-                    method: 'POST',
-                    body: fd
-                })
+            setPhase(taskToRun, "running");
 
-                if (!res.ok) {
-                    // record an error for this task, but keep going
-                    const msg = await res.text().catch(() => `Generate failed (${res.status})`);
-                    setResults(prev => ({ ...prev, [taskToRun]: { json: null, raw: msg } }));
-                    setPhase(taskToRun, "error", msg);
-                    continue;
+            const res = await apiFetch(`/draft/run-form`, { method: 'POST', body: fd });
+            const out: any = (res as any).data || null;    // <-- read once
+
+            // credits
+            const nextCredits = out?.meta?.remaining_credits;
+            if (typeof nextCredits === 'number') setCredits(nextCredits);
+
+            if (res.status === 402) {
+                setUpgradeMsg(
+                    asText(out?.detail ?? out) || "You’re out of credits. Upgrade to continue."
+                );
+                setGenError(errorToMessage(res.status, out));
+                setIsGenerating(false);
+                return;
+            }
+
+            if (!res.ok) {
+                const msg = errorToMessage(res.status, out); 
+                setResults(prev => ({ ...prev, [taskToRun]: { json: null, raw: msg } }));
+                setPhase(taskToRun, "error", msg);
+                continue;
+            }
+
+            // Success path
+            const parsedFromKnown = out?.output_json ?? null;
+            let parsed: AnyJSON | null = parsedFromKnown;
+
+            if (!parsed) parsed = parseJSON(out?.output);
+            if (!parsed) parsed = parseJSON(out?.bullets ?? null);
+            if (!parsed && typeof out?.bullets === "string") {
+                const txt = out.bullets.trim();
+                if (!(txt.startsWith("{") || txt.startsWith("```"))) {
+                const lines = out.bullets
+                    .split(/\r?\n/)
+                    .map((line: string) => line.replace(/^[\-\u2022•]\s*/, "").trim())
+                    .filter((line: string) => line.length > 0);
+                parsed = { bullets: lines.map((t: string) => ({ text: t })) } as BulletsJSON;
                 }
+            }
 
-                const out: RunFormResponse = await res.json();
-                let parsed: AnyJSON | null = out.output_json ?? null;
-                if (!parsed) parsed = parseJSON(out.output);
-                if (!parsed) parsed = parseJSON(out.bullets ?? null);
+            let raw = "";
+            if (typeof out?.output === "string") raw = out.output;
+            else try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
 
-                if (!parsed && typeof out.bullets === "string") {
-                    // Try to parse JSON from bullets first (in case backend stuffed JSON here)
-                    parsed = parseJSON(out.bullets);
-
-                    // Only do the line-to-bullets fallback if it DOESN'T look like JSON/code
-                    if (!parsed && !out.bullets.trim().startsWith("{") && !out.bullets.trim().startsWith("```")) {
-                        const lines = out.bullets
-                        .split(/\r?\n/)
-                        .map((line: string) => line.replace(/^[\-\u2022•]\s*/, "").trim())
-                        .filter((line: string) => line.length > 0);
-                        parsed = { bullets: lines.map((t: string) => ({ text: t })) } as BulletsJSON;
-                    }
-                }
-
-                let raw: string = "";
-                if (typeof out.output === "string") {
-                    raw = out.output;
-                } else {
-                    try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
-                }
-
-                setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
-                setPhase(taskToRun, "done");
+            setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
+            setPhase(taskToRun, "done");
             }
         } catch (e: any) {
             setGenError(e?.message || "Network error");
         } finally {
             setIsGenerating(false);
         }
-        
     }
 
     function formatResult(task: Task, r: TaskResult | undefined): string {
@@ -346,10 +382,23 @@ export default function DraftPage() {
         }
     }
 
+
+    const outOfCredits = credits === 0;
+    const canSubmit = !!url && !isGenerating && !outOfCredits;
     return (
         <main className="p-8 space-y-4">
             <div className="max-w-3xl mx-auto px-4">
-                <h1 className="text-2xl font-bold">Resume Bender</h1>
+                <div className="mb-3 flex items-center justify-between">
+                    <h1 className="text-2xl font-bold">Resume Bender</h1>
+                    <CreditBadge value={credits} loading={isGenerating} />
+                    <SignOutButton />
+                    <Link
+                        href="/account/password"
+                        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-neutral-100"
+                    >
+                        Change password
+                    </Link>
+                </div>
                 <div className="bg-white border rounded-2xl shadow-sm p-6">
                     <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>
                         <label htmlFor="url" className={labelBase}>Job URL</label>
@@ -452,13 +501,33 @@ export default function DraftPage() {
                             type="button" 
                             onClick={onGenerateAll}
                             className="inline-flex justify-center items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isGenerating || !url}>
-                            {isGenerating ? "Generating…" : "Get Resume Insights"}
+                            disabled={!canSubmit}>
+                            {outOfCredits ? "Out of credits" : (isGenerating ? "Generating…" : "Get Resume Insights")}
                         </button>
                     </form>
                 </div>
-                {error && <p style={{color:'crimson'}}>{error}</p>}
+                {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
+                {genError && (
+                    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                        {genError}
+                    </div>
+                )}
                 {status && <p>{status}</p>}
+                {upgradeMsg && (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-sm flex items-center justify-between gap-3"
+                    >
+                        <span>{asText(upgradeMsg)}</span>
+                        <a
+                        href="/account/billing"
+                        className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                        >
+                        Upgrade
+                        </a>
+                    </div>
+                )}
                 {Object.keys(results).length > 0 && (
                     <div className="mt-6 space-y-6">
                         {(Object.keys(results) as Task[]).map(t => {
