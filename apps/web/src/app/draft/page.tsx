@@ -129,6 +129,26 @@ export default function DraftPage() {
         })
     }, [])
 
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('rb:credits')
+            if (raw != null) {
+                const n = Number(raw)
+                if (Number.isFinite(n)) setCredits(n)
+                else localStorage.removeItem('rb:credits')
+            }
+        } catch {}
+    }, [])
+
+    useEffect(() => {
+        (async () => {
+            const res = await apiFetch<{ remaining_credits?: number }>('/account/credits')
+            const n = res.data?.remaining_credits
+            if (res.ok && typeof n === 'number') setCreditsCached(n)
+        })()
+    }, [])
+
+
     // check auth
     const { ready } = useRequireAuth()
     if (!ready) return null;
@@ -154,6 +174,11 @@ export default function DraftPage() {
     function pickTaskToRun(): Task | null {
         if (selectedTasks.length === 0) return null;
         return selectedTasks[0]; // temporary: just the first checked task
+    }
+
+    function setCreditsCached(n?: number) {
+        setCredits(n)
+        try { if (typeof n === 'number') localStorage.setItem('rb:credits', String(n)); } catch {}
     }
 
     async function onExtract() {
@@ -207,6 +232,7 @@ export default function DraftPage() {
             // update credits if present
             const nextCredits = data?.meta?.remaining_credits;
             if (typeof nextCredits === 'number') setCredits(nextCredits);
+            if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
             if (!res.ok) {
                 // optional: show upgrade banner on 402
@@ -234,7 +260,7 @@ export default function DraftPage() {
         if (!url) { setGenError("Enter a job URL first."); return; }
         if (selectedTasks.length === 0) { setGenError("Select at least one task."); return; }
 
-        if (credits === 0) {
+        if (typeof credits === 'number' && credits <= 0) {
             const msg = "You’re out of credits. Upgrade to continue.";
             setUpgradeMsg(msg);
             setGenError(msg);
@@ -261,6 +287,7 @@ export default function DraftPage() {
             // credits
             const nextCredits = out?.meta?.remaining_credits;
             if (typeof nextCredits === 'number') setCredits(nextCredits);
+            if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
             if (res.status === 402) {
                 setUpgradeMsg(
@@ -383,21 +410,22 @@ export default function DraftPage() {
     }
 
 
-    const outOfCredits = credits === 0;
+    const outOfCredits = typeof credits === 'number' && credits <= 0;
     const canSubmit = !!url && !isGenerating && !outOfCredits;
+
     return (
         <main className="p-8 space-y-4">
             <div className="max-w-3xl mx-auto px-4">
                 <div className="mb-3 flex items-center justify-between">
                     <h1 className="text-2xl font-bold">Resume Bender</h1>
                     <CreditBadge value={credits} loading={isGenerating} />
-                    <SignOutButton />
+                    {/* <SignOutButton />
                     <Link
                         href="/account/password"
                         className="rounded-lg border px-3 py-1.5 text-sm hover:bg-neutral-100"
                     >
                         Change password
-                    </Link>
+                    </Link> */}
                 </div>
                 <div className="bg-white border rounded-2xl shadow-sm p-6">
                     <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>
@@ -513,6 +541,12 @@ export default function DraftPage() {
                     </div>
                 )}
                 {status && <p>{status}</p>}
+                {typeof credits === 'number' && credits <= 0 && !upgradeMsg && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        You’re out of credits. <a className="underline" href="/account/billing">Upgrade</a> to continue.
+                    </div>
+                )}
+
                 {upgradeMsg && (
                     <div
                         role="status"
