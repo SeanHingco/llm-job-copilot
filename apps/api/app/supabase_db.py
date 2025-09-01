@@ -86,3 +86,19 @@ async def get_user_id_by_customer(stripe_customer_id: str) -> str | None:
         r.raise_for_status()
         rows = r.json()
         return rows[0]["id"] if rows else None
+
+async def insert_webhook_event_once(eid: str, etype: str) -> bool:
+    """
+    Try to insert the event id once. Returns True if inserted (first time),
+    False if it already existed.
+    """
+    headers = {**HEADERS, "Prefer": "resolution=ignore-duplicates"}
+    params  = {"on_conflict": "id"}
+    payload = [{"id": eid, "type": etype}]
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.post(f"{REST}/webhook_events", params=params, headers=headers, json=payload)
+        if r.status_code in (201, 204):
+            # 201 -> inserted; 204 -> ignored duplicate (depending on config)
+            return r.status_code == 201
+        r.raise_for_status()
+        return False

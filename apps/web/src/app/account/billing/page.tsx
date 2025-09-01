@@ -10,6 +10,15 @@ type Me = {
     free_uses_remaining?: number;
 }
 
+type SubSummary = {
+    has_subscription: boolean;
+    status?: string;
+    plan?: string;
+    plan_key?: string;
+    current_period_end?: number;
+    cancel_at_period_end?: boolean;
+};
+
 export default function Billing() {
     const { ready } = useRequireAuth();
     const [me, setMe] = useState<Me | null>(null);
@@ -18,12 +27,19 @@ export default function Billing() {
     const [subscribing, setSubscribing] = useState<boolean>(false);
     const [managing, setManaging] = useState<boolean>(false);
     const [completing, setCompleting] = useState<boolean>(false);
+    const [buying, setBuying] = useState<null | "pack_100" | "pack_500">(null);
+    const [sub, setSub] = useState<SubSummary | null>(null);
 
-    const plan = me?.plan ?? 'free'
+    const plan = me?.plan ?? 'free';
+    const isFree = (me?.plan ?? 'free') === 'free';
+    const hasSub = Boolean(sub?.has_subscription);
+    const subStatus = sub?.status;
+    const cancelsAtPeriodEnd = Boolean(sub?.cancel_at_period_end);
 
     // styling
     const statBase = 'rounded-lg border bg-slate-50 p-3';
     const labelBase = 'text-xs font-medium text-slate-500';
+    const subBase = 'inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed';
 
     // load user snapshot
     useEffect(() => {
@@ -52,6 +68,15 @@ export default function Billing() {
         })()
         return () => { cancelled = true };
     },[]);
+
+    useEffect(() => {
+    (async () => {
+        try {
+            const res = await apiFetch<SubSummary>("/billing/subscription-summary");
+            if (res.ok) setSub(res.data || null);
+        } catch {}
+        })();
+    }, []);
 
     // handle checkout return
     useEffect(() => {
@@ -94,36 +119,73 @@ export default function Billing() {
         })()
     },[]);
 
+    useEffect(() => {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get("checkout") !== "success" || !p.get("key")) return;
+
+        // remove the query params from the URL
+        const url = new URL(window.location.href);
+        url.searchParams.delete("checkout");
+        url.searchParams.delete("key");
+        window.history.replaceState({}, "", url.toString());
+
+        // optional: refresh user snapshot (credits won't change until webhook exists,
+        // but this is where it will reflect once we add that next step)
+        (async () => {
+            try {
+            const meRes = await apiFetch("/me");
+            if (meRes.ok) {
+                const data = await meRes.json();
+                setMe(data);
+                setError(null);
+            }
+            } catch (e: any) {
+            setError(`Error: ${e?.message || String(e)}`);
+            }
+        })();
+    }, []);
+
     if (!ready) return null;
 
-    async function subscribeStarter() {
+    async function subscribe(priceKey: 'sub_starter'|'sub_plus'|'sub_pro') {
         if (subscribing || loading || completing) return;
-
         setError(null); setSubscribing(true);
-
         try {
-            const res = await apiFetch('/billing/checkout', { method: 'POST' });
-            if (res.status === 401) {
-                setError('Please sign in');
-                setSubscribing(false);
-                return;
-            }
-            if (!res.ok) {
-                const msg = await res.text();
-                setError(`Error: ${msg}`);
-                setSubscribing(false);
-                return;
-            }
-            const { url } = await res.json();
-            if (url) {
-                window.location.href = url;
+            const res = await apiFetch('/billing/checkout', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ price_key: priceKey }),
+            });
+            if (!res.ok) { setError(`Error: ${await res.text()}`); setSubscribing(false); return; }
+            const { url } = await res.json(); if (url) window.location.assign(url); else setError('No Checkout URL');
+        } catch (e:any) {
+            setError(`Error: ${e?.message || String(e)}`);
+        } finally {
+            setSubscribing(false);
+        }
+    }
+
+
+    async function buyCredits(priceKey: "pack_100" | "pack_500") {
+        if (buying) return;
+        setError(null);
+        setBuying(priceKey);
+        try {
+            const res = await apiFetch<{ url?: string }>("/billing/checkout", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ price_key: priceKey }),
+            });
+            if (res.ok && res.data?.url) {
+            window.location.assign(res.data.url);
             } else {
-                setError('No Checkout URL');
-                setSubscribing(false);
+                const msg = await res.text();
+                setError(`Error starting checkout: ${msg || "Unknown error"}`);
+                setBuying(null);
             }
         } catch (e: any) {
             setError(`Error: ${e?.message || String(e)}`);
-            setSubscribing(false);
+            setBuying(null);
         }
     }
 
@@ -194,15 +256,27 @@ export default function Billing() {
                         {/* Plan */}
                         <div className={statBase}>
                             <div className={labelBase}>Plan</div>
-                            <div className="mt-1">
-                            <span
+                            <div className="mt-1 flex items-center gap-2">
+                                <span
                                 className={[
-                                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                plan === 'free' ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700',
+                                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                    isFree ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700',
                                 ].join(' ')}
-                            >
+                                >
                                 {plan}
-                            </span>
+                                </span>
+
+                                {/* subtle status chips, only if there is a subscription */}
+                                {hasSub && subStatus && (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                                    {subStatus}
+                                </span>
+                                )}
+                                {hasSub && cancelsAtPeriodEnd && (
+                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                                    Cancels at period end
+                                </span>
+                                )}
                             </div>
                         </div>
 
@@ -218,12 +292,10 @@ export default function Billing() {
                 </div>
                 <div className='mt-6 flex flex-wrap gap-2'>
                     {!loading && plan === 'free' && (
-                        <div className=
-                            'inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed'
-                        >
-                            <button onClick={subscribeStarter} disabled={subscribing || completing} aria-busy={subscribing || completing}>
-                                {subscribing ? 'Redirecting…' : 'Subscribe (Starter)'}
-                            </button>
+                        <div className="flex flex-wrap gap-2 mt-6">
+                            <button className={subBase} onClick={() => subscribe('sub_starter')} >Subscribe: Starter</button>
+                            <button className={subBase }onClick={() => subscribe('sub_plus')}>Subscribe: Plus</button>
+                            <button className={subBase} onClick={() => subscribe('sub_pro')}>Subscribe: Unlimited</button>
                         </div>
                     )}
                     {!loading && plan !== 'free' && (
@@ -234,6 +306,28 @@ export default function Billing() {
                                 {managing ? 'Opening…' : 'Manage billing'}
                             </button>
                         </div>
+                    )}
+
+                    {!loading && plan !== 'free' &&(
+                        <>
+                        <button
+                            onClick={() => buyCredits("pack_100")}
+                            disabled={buying === "pack_100" || loading || completing}
+                            aria-busy={buying === "pack_100"}
+                            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                            {buying === "pack_100" ? "Redirecting…" : "Buy 100 credits"}
+                        </button>
+
+                        <button
+                            onClick={() => buyCredits("pack_500")}
+                            disabled={buying === "pack_500" || loading || completing}
+                            aria-busy={buying === "pack_500"}
+                            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            {buying === "pack_500" ? "Redirecting…" : "Buy 500 credits"}
+                        </button>
+                        </>
                     )}
                 </div>
             </div>
