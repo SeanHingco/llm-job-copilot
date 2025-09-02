@@ -5,6 +5,7 @@ from typing import Optional, Literal
 
 from app.utils.llm import generate_text
 from app.utils.rate_limit import throttle
+from app.utils.credits import ensure_daily_free_topup
 
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
@@ -160,6 +161,7 @@ async def draft_run_form(
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
 ):
+    _ = await ensure_daily_free_topup(user["user_id"])
     ok, retry = throttle(f"user:{user['user_id']}:run_form", limit=RL_RUN_FORM_PER_MIN, window_sec=60)
     if not ok:
         raise HTTPException(

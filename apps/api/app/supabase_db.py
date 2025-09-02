@@ -2,6 +2,7 @@ from __future__ import annotations
 import os, httpx
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -102,3 +103,20 @@ async def insert_webhook_event_once(eid: str, etype: str) -> bool:
             return r.status_code == 201
         r.raise_for_status()
         return False
+
+async def set_remaining_and_mark_refill(user_id: str, remaining: int) -> dict:
+    """
+    Update free_uses_remaining and last_free_refill_at in one PATCH.
+    Returns the updated row.
+    """
+    payload = {
+        "free_uses_remaining": int(remaining),
+        "last_free_refill_at": datetime.now(timezone.utc).isoformat(),
+    }
+    params  = {"id": f"eq.{user_id}"}
+    headers = {**HEADERS, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.patch(f"{REST}/users", params=params, headers=headers, json=payload)
+        r.raise_for_status()
+        j = r.json()
+        return j[0] if isinstance(j, list) else j

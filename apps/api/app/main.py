@@ -3,10 +3,12 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os, stripe, json
+from datetime import datetime, timezone
 from .routers import ingest
 from .routers import draft
 from .routers import resume
 from .utils.pricing import PRICE_CATALOG
+from .utils.credits import ensure_daily_free_topup
 from .auth import verify_supabase_session as verify_user
 from .supabase_db import (upsert_user,
                             get_user_summary,
@@ -15,7 +17,8 @@ from .supabase_db import (upsert_user,
                             upsert_customer,
                             get_stripe_customer_id,
                             get_user_id_by_customer,
-                            insert_webhook_event_once)
+                            insert_webhook_event_once,
+                            set_remaining_and_mark_refill)
 
 app = FastAPI(title="LLM Job Copilot API")
 
@@ -25,6 +28,7 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://llm-job-copilot-web-git-dev-seans-projects-46dd2537.vercel.app,https://resume-bender.seanhing.co")
 ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 STARTER_ALLOWANCE = int(os.getenv("MONTHLY_CREDITS_STARTER", "50"))
+DAILY_FREE_CREDITS = int(os.getenv("DAILY_FREE_CREDITS", "6"))
 
 # helpers
 async def _grant_credits(user_id: str, delta: int) -> int:
@@ -103,12 +107,12 @@ async def account_credits(user = Depends(verify_user)):
         else:
             summary = {}
 
-    remaining = summary.get("free_uses_remaining")
+    remaining = await ensure_daily_free_topup(uid)
 
-    try:
-        remaining = int(remaining) if remaining is not None else 0
-    except:
-        remaining = 0
+    # try:
+    #     remaining = int(remaining) if remaining is not None else 0
+    # except:
+    #     remaining = 0
 
     return {"remaining_credits": remaining}
 
