@@ -21,7 +21,7 @@ app = FastAPI(title="LLM Job Copilot API")
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STARTER_PRICE = os.getenv("STRIPE_PRICE_STARTER_MONTHLY")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://resume-bender-api.onrender.com")
 ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 STARTER_ALLOWANCE = int(os.getenv("MONTHLY_CREDITS_STARTER", "50"))
 
