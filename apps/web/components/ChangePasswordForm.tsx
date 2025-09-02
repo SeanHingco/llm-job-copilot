@@ -35,7 +35,7 @@ export default function ChangePasswordForm() {
             setOk('Password updated.');
             setCurrentPw(''); setNewPw(''); setConfirmPw('');
         } catch (err: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
+            const msg = err instanceof Error ? err.message : String(e);
             setError(msg);
         } finally {
             setLoading(false);

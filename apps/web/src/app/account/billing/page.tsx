@@ -118,6 +118,7 @@ export default function Billing() {
                 } finally {
                     if (!cancelled) setCompleting(false);
                 }
+                return () => { cancelled = true };
         })()
     },[]);
 
