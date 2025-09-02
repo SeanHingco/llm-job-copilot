@@ -115,6 +115,7 @@ function errorToMessage(status: number, body: ErrorBody): string {
   if (status === 402) return detailText || "You’re out of credits. Upgrade to continue.";
   if (status === 0)   return "Network error. Check your connection and try again.";
   if (status >= 500)  return "Something went wrong on our side. Please try again.";
+  if (status === 429) return detailText || "Too many requests. Please wait a moment.";
 
   if (status >= 400)  return detailText || `Request failed (${status}).`;
   return detailText || "Unexpected error.";

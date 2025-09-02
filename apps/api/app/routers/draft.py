@@ -4,6 +4,8 @@ from pydantic import BaseModel, HttpUrl
 from typing import Optional, Literal
 
 from app.utils.llm import generate_text
+from app.utils.rate_limit import throttle
+
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
 from app.routers.resume import extract_resume as extract_route
@@ -18,6 +20,7 @@ bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
 Task = Literal["bullets", "talking_points", "cover_letter", "alignment"]
 PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
+RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
 
 class DraftReq(BaseModel):
     task: Task="bullets"
@@ -157,6 +160,14 @@ async def draft_run_form(
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
 ):
+    ok, retry = throttle(f"user:{user['user_id']}:run_form", limit=RL_RUN_FORM_PER_MIN, window_sec=60)
+    if not ok:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait a moment.",
+            headers={"Retry-After": str(retry)},
+        )
+
     profile: UserSummary = await get_user_summary(user["user_id"])
     credits = int(profile["free_uses_remaining"])
 
