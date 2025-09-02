@@ -3,10 +3,10 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { apiFetch } from '@/lib/api'
 
-async function ping() {
-  const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/whoami`)
-  console.log(await res.json())
-}
+// async function ping() {
+//   const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/whoami`)
+//   console.log(await res.json())
+// }
 
 export default function AuthPage() {
     const[email, setEmail] = useState('');

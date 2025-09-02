@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+
 export async function POST(req: Request) {
   try {
     const { user_id, new_password } = await req.json()
@@ -15,7 +16,8 @@ export async function POST(req: Request) {
     const { error } = await supa.auth.admin.updateUserById(user_id, { password: new_password })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'unknown' }, { status: 500 })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg || 'unknown' }, { status: 500 })
   }
 }

@@ -78,8 +78,9 @@ export default function IngestPage() {
                 const json: IngestOk = await res.json();
                 setData(json);
             }
-        } catch (error: any) {
-            setError(`Error: ${error?.message ?? "Network error"}`);
+        } catch (error: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(`Error: ${msg ?? "Network error"}`);
         } finally {
             setLoading(false);
         }
@@ -131,7 +132,7 @@ export default function IngestPage() {
                     </div>
                     <pre className="text-xs text-gray-600 whitespace-pre-wrap">{data.preview}</pre>
                     <div className="text-sm text-gray-600">
-                        <span className="font-medium">Chunks:</span> {(data as any).chunk_count ?? "—"}
+                        <span className="font-medium">Chunks:</span> {(data).chunk_count ?? "—"}
                     </div>
                     {"selected_indices" in data && data.selected_indices && (
                         <div className="text-sm text-gray-700">

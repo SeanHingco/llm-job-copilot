@@ -2,16 +2,17 @@
 import {useState, useEffect} from "react";
 import { apiFetch } from '@/lib/api';
 import CreditBadge from 'components/CreditBadge'
-import SignOutButton from "components/SignOutButton";
+// import SignOutButton from "components/SignOutButton";
 import { useRequireAuth } from "@/lib/RequireAuth";
 import { supabase } from '@/lib/supabaseClient';
-import ChangePasswordForm from "components/ChangePasswordForm";
-import Link from 'next/link'
+// import ChangePasswordForm from "components/ChangePasswordForm";
+// import Link from 'next/link'
+import { ApiResponse } from "@/lib/api";
 
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
 
-type Meta = { remaining_credits?: number };
+// type Meta = { remaining_credits?: number };
 
 type BulletsJSON = { bullets: { text: string; job_chunks?: number[] }[] };
 
@@ -52,6 +53,53 @@ type RunFormResponse = {
   meta?: Record<string, unknown>;
 };
 
+type ErrorBody = {
+  detail?: unknown;
+  message?: unknown;
+  error?: unknown;
+};
+
+type ExtractResponse = {
+  text?: string;
+  text_length?: number;
+  probably_scanned?: boolean;
+};
+
+export type PriceKey = 'pack_100' | 'pack_500' | 'sub_starter' | 'sub_plus' | 'sub_pro';
+
+// Simple credits meta we actually read
+type CreditsMeta = { remaining_credits?: number; [k: string]: unknown };
+
+// Success payload for /draft/run-form
+type RunFormOk = {
+  output_json?: AnyJSON | null;
+  output?: string | null;
+  bullets?: string | null;
+  prompt?: string | null;
+  meta?: CreditsMeta;
+};
+
+type ApiError = {
+  detail?: string | { message?: string } | unknown;
+  message?: string;
+  code?: string;
+  current_credits?: number;
+};
+
+export type RunFormPayload = RunFormOk | ApiError;
+
+export type AccountCreditsResponse = { remaining_credits: number };
+export type SpendResponse = { ok: true; free_uses_remaining: number };
+export type CheckoutResponse = { url: string };
+export type CheckoutStatusResponse = {
+  ok: boolean; paid: boolean; status?: string;
+  email?: string; mode?: 'payment'|'subscription';
+  subscription_id?: string | null;
+};
+export type CompleteSubscriptionResponse = {
+  ok: true; plan: string; credited: number; user: { free_uses_remaining: number; plan: string };
+};
+
 // helpers
 const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "bullets",         label: "Resume Bullets" },
@@ -60,7 +108,7 @@ const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "alignment",       label: "Alignment" },
 ];
 
-function errorToMessage(status: number, body: any): string {
+function errorToMessage(status: number, body: ErrorBody): string {
   const detailText = asText(body?.detail ?? body?.message ?? body?.error ?? "");
 
   if (status === 401) return detailText || "You’re signed out. Please sign in.";
@@ -72,29 +120,63 @@ function errorToMessage(status: number, body: any): string {
   return detailText || "Unexpected error.";
 }
 
-function asText(x: any): string {
+function asText(x: unknown): string {
   if (x == null) return "";
   if (typeof x === "string") return x;
-  if (typeof x?.message === "string") return x.message;
-  if (typeof x?.detail === "string") return x.detail;
-  try { return JSON.stringify(x); } catch { return String(x); }
+  if (typeof x === "object") {
+    const obj = x as Record<string, unknown>;
+    const msg = obj.message;
+    const det = obj.detail;
+    if (typeof msg === "string") return msg;
+    if (typeof det === "string") return det;
+    try { return JSON.stringify(x); } catch { /* ignore */ }
+  }
+  return String(x);
+}
+
+function hasCreditsMeta(x: unknown): x is { meta: CreditsMeta } {
+  return !!x && typeof x === 'object' && 'meta' in x;
+}
+
+function isApiError(x: unknown): x is ApiError {
+  return isObject(x) && ("detail" in x || "message" in x || "error" in x);
+}
+
+function isRunFormOk(x: unknown): x is RunFormOk {
+  return isObject(x) && ("output_json" in x || "output" in x || "bullets" in x);
+}
+
+function errToString(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  try { return JSON.stringify(e); } catch { return String(e); }
 }
 
 // type guarding
-function isBullets(j: AnyJSON): j is BulletsJSON {
-  return !!(j as any)?.bullets;
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+function isBullets(j: unknown): j is BulletsJSON {
+  return isObject(j) && Array.isArray((j as { bullets?: unknown }).bullets);
 }
-function isTalking(j: AnyJSON): j is TalkingJSON {
-  return !!(j as any)?.points;
+function isTalking(j: unknown): j is TalkingJSON {
+  return isObject(j) && Array.isArray((j as { points?: unknown }).points);
 }
-function isCover(j: AnyJSON): j is CoverJSON {
-  const x = j as any;
-  return typeof x?.subject === "string" && Array.isArray(x?.body_paragraphs);
+function isCover(j: unknown): j is CoverJSON {
+  return (
+    isObject(j) &&
+    typeof (j as { subject?: unknown }).subject === "string" &&
+    Array.isArray((j as { body_paragraphs?: unknown }).body_paragraphs)
+  );
 }
-function isAlign(j: AnyJSON): j is AlignJSON {
-  const x = j as any;
-  return typeof x?.coverage === "number" && Array.isArray(x?.strengths);
+function isAlign(j: unknown): j is AlignJSON {
+  return (
+    isObject(j) &&
+    typeof (j as { coverage?: unknown }).coverage === "number" &&
+    Array.isArray((j as { strengths?: unknown }).strengths)
+  );
 }
+
 
 
 
@@ -181,77 +263,77 @@ export default function DraftPage() {
         try { if (typeof n === 'number') localStorage.setItem('rb:credits', String(n)); } catch {}
     }
 
-    async function onExtract() {
-        setError(""); setStatus(""); setProbablyScanned(false);
-        if (!resumeFile) { setError("Select a .pdf or .txt first."); return; }
+    // async function onExtract() {
+    //     setError(""); setStatus(""); setProbablyScanned(false);
+    //     if (!resumeFile) { setError("Select a .pdf or .txt first."); return; }
 
-        setIsExtracting(true);
-        try {
-            const fd = new FormData();
-            fd.append("file", resumeFile);
+    //     setIsExtracting(true);
+    //     try {
+    //         const fd = new FormData();
+    //         fd.append("file", resumeFile);
 
-            const res = await apiFetch(`/resume/extract`, {
-            method: 'POST',
-            body: fd
-            });
+    //         const res = await apiFetch(`/resume/extract`, {
+    //         method: 'POST',
+    //         body: fd
+    //         });
 
-            const data: any = (res as any).data || null;
+    //         const data: any = (res as any).data || null;
 
-            if (!res.ok) {
-            const msg = data?.detail || `Extract failed (${res.status})`;
-            setError(msg);
-            return;
-            }
+    //         if (!res.ok) {
+    //         const msg = data?.detail || `Extract failed (${res.status})`;
+    //         setError(msg);
+    //         return;
+    //         }
 
-            setResumeText(data?.text ?? "");
-            setStatus(`Extracted • ${data?.text_length ?? 0} chars`);
-            setProbablyScanned(Boolean(data?.probably_scanned));
-        } catch (e: any){
-            setError(e?.message || "Network error");
-        } finally {
-            setIsExtracting(false);
-        }
-    }
+    //         setResumeText(data?.text ?? "");
+    //         setStatus(`Extracted • ${data?.text_length ?? 0} chars`);
+    //         setProbablyScanned(Boolean(data?.probably_scanned));
+    //     } catch (e: any){
+    //         setError(e?.message || "Network error");
+    //     } finally {
+    //         setIsExtracting(false);
+    //     }
+    // }
 
-    async function onGenerate() {
-        setGenError(""); setBullets("");
-        if (!url) { setGenError("Enter a job URL first."); return; }
+    // async function onGenerate() {
+    //     setGenError(""); setBullets("");
+    //     if (!url) { setGenError("Enter a job URL first."); return; }
 
-        setIsGenerating(true);
-        try {
-            const body = { url, q: q || null, job_title: jobTitle || null, resume: resumeText || "" };
+    //     setIsGenerating(true);
+    //     try {
+    //         const body = { url, q: q || null, job_title: jobTitle || null, resume: resumeText || "" };
 
-            const res = await apiFetch(`/draft/run`, {       // <-- remove ${API}
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-            });
+    //         const res = await apiFetch(`/draft/run`, {       // <-- remove ${API}
+    //         method: "POST",
+    //         headers: { "content-type": "application/json" },
+    //         body: JSON.stringify(body),
+    //         });
 
-            const data: any = (res as any).data || null;     // <-- read once
+    //         const data: any = (res as any).data || null;     // <-- read once
 
-            // update credits if present
-            const nextCredits = data?.meta?.remaining_credits;
-            if (typeof nextCredits === 'number') setCredits(nextCredits);
-            if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
+    //         // update credits if present
+    //         const nextCredits = data?.meta?.remaining_credits;
+    //         if (typeof nextCredits === 'number') setCredits(nextCredits);
+    //         if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
-            if (!res.ok) {
-                // optional: show upgrade banner on 402
-                if (res.status === 402) {
-                    setUpgradeMsg(
-                        asText(data?.detail ?? data) || "You’re out of credits. Upgrade to continue."
-                    );
-                    }
-                    setGenError(errorToMessage(res.status, data));
-                return;
-            }
+    //         if (!res.ok) {
+    //             // optional: show upgrade banner on 402
+    //             if (res.status === 402) {
+    //                 setUpgradeMsg(
+    //                     asText(data?.detail ?? data) || "You’re out of credits. Upgrade to continue."
+    //                 );
+    //                 }
+    //                 setGenError(errorToMessage(res.status, data));
+    //             return;
+    //         }
 
-            setBullets(data?.bullets ?? "");
-        } catch (e: any){
-            setGenError(e?.message || "Network error");
-        } finally {
-            setIsGenerating(false);
-        }
-    }
+    //         setBullets(data?.bullets ?? "");
+    //     } catch (e: any){
+    //         setGenError(e?.message || "Network error");
+    //     } finally {
+    //         setIsGenerating(false);
+    //     }
+    // }
 
     async function onGenerateAll() {
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
@@ -281,56 +363,66 @@ export default function DraftPage() {
 
             setPhase(taskToRun, "running");
 
-            const res = await apiFetch(`/draft/run-form`, { method: 'POST', body: fd });
-            const out: any = (res as any).data || null;    // <-- read once
+            const res = await apiFetch<RunFormPayload>('/draft/run-form', { method: 'POST', body: fd });
+            const out = res.data;
 
             // credits
-            const nextCredits = out?.meta?.remaining_credits;
+            const nextCredits =
+                hasCreditsMeta(out) && typeof out.meta?.remaining_credits === 'number'
+                    ? out.meta.remaining_credits
+                    : undefined;
             if (typeof nextCredits === 'number') setCredits(nextCredits);
             if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
             if (res.status === 402) {
-                setUpgradeMsg(
-                    asText(out?.detail ?? out) || "You’re out of credits. Upgrade to continue."
-                );
-                setGenError(errorToMessage(res.status, out));
+                const err: ErrorBody = isApiError(out) ? out : {};
+                setUpgradeMsg(asText(err.detail ?? err.message ?? err.error ?? ""));
+                setGenError(errorToMessage(res.status, err));
                 setIsGenerating(false);
                 return;
             }
 
             if (!res.ok) {
-                const msg = errorToMessage(res.status, out); 
+                const err: ErrorBody = isApiError(out) ? out : {};
+                const msg = errorToMessage(res.status, err);
                 setResults(prev => ({ ...prev, [taskToRun]: { json: null, raw: msg } }));
                 setPhase(taskToRun, "error", msg);
                 continue;
             }
 
             // Success path
-            const parsedFromKnown = out?.output_json ?? null;
-            let parsed: AnyJSON | null = parsedFromKnown;
-
-            if (!parsed) parsed = parseJSON(out?.output);
-            if (!parsed) parsed = parseJSON(out?.bullets ?? null);
-            if (!parsed && typeof out?.bullets === "string") {
-                const txt = out.bullets.trim();
-                if (!(txt.startsWith("{") || txt.startsWith("```"))) {
-                const lines = out.bullets
-                    .split(/\r?\n/)
-                    .map((line: string) => line.replace(/^[\-\u2022•]\s*/, "").trim())
-                    .filter((line: string) => line.length > 0);
-                parsed = { bullets: lines.map((t: string) => ({ text: t })) } as BulletsJSON;
-                }
-            }
-
+            let parsed: AnyJSON | null = null;
             let raw = "";
-            if (typeof out?.output === "string") raw = out.output;
-            else try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
+            if (isRunFormOk(out)) {
+                    const parsedFromKnown = out.output_json ?? null;
+                    parsed = parsedFromKnown;
 
-            setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
-            setPhase(taskToRun, "done");
+                    if (!parsed) parsed = parseJSON(out.output);
+                    if (!parsed) parsed = parseJSON(out.bullets ?? null);
+
+                    if (!parsed && typeof out.bullets === "string") {
+                        const txt = out.bullets.trim();
+                        if (!(txt.startsWith("{") || txt.startsWith("```"))) {
+                        const lines = out.bullets
+                            .split(/\r?\n/)
+                            .map(line => line.replace(/^[\-\u2022•]\s*/, "").trim())
+                            .filter(line => line.length > 0);
+                        parsed = { bullets: lines.map(t => ({ text: t })) } as BulletsJSON;
+                        }
+                    }
+
+                    if (typeof out.output === "string") raw = out.output;
+                    else try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
+                    } else {
+                    // If we somehow got a non-ok shape on a 2xx, stringify it for visibility
+                    try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
+                    }
+
+                    setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
+                    setPhase(taskToRun, "done");
             }
-        } catch (e: any) {
-            setGenError(e?.message || "Network error");
+        } catch (e: unknown) {
+            setGenError(errToString(e));
         } finally {
             setIsGenerating(false);
         }

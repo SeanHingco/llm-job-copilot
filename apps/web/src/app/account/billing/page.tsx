@@ -58,8 +58,9 @@ export default function Billing() {
                     setMe(data);
                     setError(null);
                 }
-            } catch (e: any) {
-                if (!cancelled) { setError(`Error: ${e?.message || String(e)}`) };
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                if (!cancelled) { setError(`Error: ${msg || String(e)}`) };
             } finally {
                 if (!cancelled) { 
                     setLoading(false);
@@ -111,8 +112,9 @@ export default function Billing() {
                         setError(null);
                     }
                     }
-                } catch (e: any) {
-                    if (!cancelled) setError(`Error: ${e?.message || String(e)}`);
+                } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    if (!cancelled) setError(`Error: ${msg || String(e)}`);
                 } finally {
                     if (!cancelled) setCompleting(false);
                 }
@@ -139,8 +141,9 @@ export default function Billing() {
                 setMe(data);
                 setError(null);
             }
-            } catch (e: any) {
-            setError(`Error: ${e?.message || String(e)}`);
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                setError(`Error: ${msg || String(e)}`);
             }
         })();
     }, []);
@@ -158,8 +161,9 @@ export default function Billing() {
             });
             if (!res.ok) { setError(`Error: ${await res.text()}`); setSubscribing(false); return; }
             const { url } = await res.json(); if (url) window.location.assign(url); else setError('No Checkout URL');
-        } catch (e:any) {
-            setError(`Error: ${e?.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(`Error: ${msg || String(e)}`);
         } finally {
             setSubscribing(false);
         }
@@ -183,8 +187,9 @@ export default function Billing() {
                 setError(`Error starting checkout: ${msg || "Unknown error"}`);
                 setBuying(null);
             }
-        } catch (e: any) {
-            setError(`Error: ${e?.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(`Error: ${msg || String(e)}`);
             setBuying(null);
         }
     }
@@ -213,8 +218,9 @@ export default function Billing() {
                 setError('No portal URL');
                 setManaging(false);
             }
-        } catch (e: any) {
-            setError(`Error: ${e?.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setError(`Error: ${msg || String(e)}`);
             setManaging(false);
         }
     }

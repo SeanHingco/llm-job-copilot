@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import type { User } from '@supabase/supabase-js';
 
 export function useRequireAuth() {
-  const router = useRouter()
-  const [ready, setReady] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     let mounted = true

@@ -47,9 +47,10 @@ export default function LoginPage() {
                     setError('Check your email to confirm, then sign in.')
                 }
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.log('✖ signIn threw', err);
-            setError(err?.message || 'Something went wrong.');
+            const msg = err instanceof Error ? err.message : String(e);
+            setError(msg|| 'Something went wrong.');
         } finally {
             setLoading(false);
         }

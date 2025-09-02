@@ -3,9 +3,9 @@ import { supabase } from '@/lib/supabaseClient'
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
 
-export type ApiResponse<T = any> = Response & { data: T | null }
+export type ApiResponse<T = unknown> = Response & { data: T | null };
 
-export async function apiFetch<T = any>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
+export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const { data: sess } = await supabase.auth.getSession()
   const token = sess.session?.access_token
 
@@ -21,7 +21,7 @@ export async function apiFetch<T = any>(path: string, init: RequestInit = {}): P
   }
 
   // don't force JSON for form-like bodies
-  const body = init.body as any
+  const body = init.body;
   const isFormLike =
     (typeof FormData !== 'undefined' && body instanceof FormData) ||
     (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) ||
@@ -62,7 +62,6 @@ export async function apiFetch<T = any>(path: string, init: RequestInit = {}): P
     try { parsed = await res.clone().json() as T } catch { parsed = null }
   }
 
-  const augmented = res as ApiResponse<T>
-  ;(augmented as any).data = parsed
-  return augmented
+  const augmented = Object.assign(res, { data: parsed as T | null }) as ApiResponse<T>;
+  return augmented;
 }

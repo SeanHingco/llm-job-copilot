@@ -21,12 +21,13 @@ export default function DebugAuth() {
 
   async function pingApi() {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      // const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const res = await apiFetch('/whoami')
       const json = await res.json()
       setWhoami(JSON.stringify(json, null, 2))
-    } catch (e: any) {
-      setWhoami(`Error: ${e?.message || String(e)}`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setWhoami(`Error: ${msg || String(e)}`)
     }
   }
 
