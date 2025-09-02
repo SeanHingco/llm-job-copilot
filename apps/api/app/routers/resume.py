@@ -1,16 +1,24 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 import io
+import os
 from pypdf import PdfReader
 
 
 # constants
-MAX_BYTES = 5 * 1024 * 1024
+MAX_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
 MAX_PAGES = 20
 
 router = APIRouter(prefix="/resume", tags=["resume"])
 
+def _is_pdf_header(chunk: bytes) -> bool:
+    # PDFs almost always start with %PDF-
+    return chunk.startswith(b"%PDF-")
+
 @router.post("/extract")
-async def extract_resume(file: UploadFile=File(...)):
+async def extract_resume(file: UploadFile=File(...), request: Request = None):
+    cl = request.headers.get("content-length") if request else None
+    if cl and cl.isdigit() and int(cl) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large")
 
     blob = await file.read()
     if len(blob) > MAX_BYTES:

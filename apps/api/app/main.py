@@ -1,6 +1,7 @@
 # api/app/main.py
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os, stripe, json
 from .routers import ingest
 from .routers import draft
@@ -52,6 +53,22 @@ async def _log_req_res(request, call_next):
           resp.status_code,
           "ACAO:", resp.headers.get("access-control-allow-origin"))
     return resp
+
+@app.middleware("http")
+async def _limit_body_size(request, call_next):
+    # Only guard the upload endpoints
+    guarded_paths = ("/resume/extract",)
+    if request.url.path.startswith(guarded_paths):
+        try:
+            max_bytes = int(os.getenv("MAX_UPLOAD_BYTES", "5242880"))
+        except ValueError:
+            max_bytes = 5_242_880
+
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > max_bytes:
+            return JSONResponse({"detail": "File too large"}, status_code=413)
+
+    return await call_next(request)
 
 
 @app.get("/health")
