@@ -22,8 +22,10 @@ export default function AppHeader() {
     <header className="border-b bg-white">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3 justify-between">
         <div className="flex items-center gap-2">
-          {link('/draft', 'Draft', pathname)}
+          {link('/draft', 'Application Insights', pathname)}
           {link('/account', 'Account', pathname)}
+          {link('/legal/privacy', 'Privacy', pathname)}
+          {link('/legal/terms', 'Terms', pathname)}
           {/* {link('/account/billing', 'Billing', pathname)}
           {link('/account/password', 'Password', pathname)} */}
         </div>

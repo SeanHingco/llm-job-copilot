@@ -36,6 +36,11 @@ export default function Billing() {
     const subStatus = sub?.status;
     const cancelsAtPeriodEnd = Boolean(sub?.cancel_at_period_end);
 
+    const nextRenewal =
+        sub?.has_subscription && typeof sub.current_period_end === 'number'
+            ? new Date(sub.current_period_end * 1000).toLocaleDateString()
+            : null;
+
     // styling
     const statBase = 'rounded-lg border bg-slate-50 p-3';
     const labelBase = 'text-xs font-medium text-slate-500';
@@ -335,6 +340,25 @@ export default function Billing() {
                             {buying === "pack_500" ? "Redirecting…" : "Buy 500 credits"}
                         </button>
                         </>
+                    )}
+
+                    {!loading && hasSub && (
+                        <p className="mt-2 text-xs text-slate-500">
+                            Renews on <strong>{nextRenewal ?? '—'}</strong>. Plan changes are prorated by Stripe.
+                            {' '}Cancel anytime in the{' '}
+                            <button
+                                type="button"
+                                onClick={manageBilling}
+                                className="underline underline-offset-2 hover:text-slate-700"
+                            >
+                                Billing Portal
+                            </button>.
+                            {cancelsAtPeriodEnd && (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
+                                    Cancellation scheduled
+                                </span>
+                            )}
+                        </p>
                     )}
                 </div>
             </div>

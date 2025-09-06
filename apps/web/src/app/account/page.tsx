@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/RequireAuth';
 import { supabase } from '@/lib/supabaseClient';
 
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "seanescan@gmail.com";
+
 export default function AccountPage() {
     const { ready } = useRequireAuth();
     const [email, setEmail] = useState<string>('');
@@ -38,6 +40,14 @@ export default function AccountPage() {
                         <div className="text-sm text-neutral-600">Change your password</div>
                     </Link>
                 </div>
+
+                <section className="mt-6 rounded-lg border bg-white p-4">
+                    <h2 className="text-base text-neutral-900 font-semibold">Support</h2>
+                    <p className="mt-1 text-sm text-neutral-600">
+                        Questions or billing issues? Email{" "}
+                        <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+                    </p>
+                </section>
             </div>
         </main>
     )

@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import os, stripe, json
+import os, stripe, json, sys, logging
 from datetime import datetime, timezone
 from .routers import ingest
 from .routers import draft
@@ -19,6 +19,14 @@ from .supabase_db import (upsert_user,
                             get_user_id_by_customer,
                             insert_webhook_event_once,
                             set_remaining_and_mark_refill)
+
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("api")
 
 app = FastAPI(title="LLM Job Copilot API")
 
@@ -48,6 +56,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def _errors(request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled %s %s", request.method, request.url.path)
+        raise
+
 
 @app.middleware("http")
 async def _log_req_res(request, call_next):
