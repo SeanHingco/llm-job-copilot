@@ -47,6 +47,26 @@ async def _grant_credits(user_id: str, delta: int) -> int:
     await set_plan_and_grant(user_id, plan, new_total)
     return new_total
 
+async def _ensure_current_mode_customer(user_id: str, email: str | None) -> str:
+    """
+    Returns a Stripe customer ID valid for the CURRENT Stripe mode (test or live).
+    If the stored customer_id is from the wrong mode, creates a new one and saves it.
+    """
+    cust_id = await get_stripe_customer_id(user_id)
+    if cust_id:
+        try:
+            stripe.Customer.retrieve(cust_id)  # will fail if wrong mode
+            return cust_id
+        except stripe.error.InvalidRequestError as e:
+            if "No such customer" not in str(e):
+                raise
+            # fall through to create a new customer in this mode
+
+    customer = stripe.Customer.create(email=email, metadata={"user_id": user_id})
+    cust_id = customer["id"]
+    await upsert_customer(user_id, cust_id)
+    return cust_id
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -158,11 +178,7 @@ async def billing_checkout(payload: dict | None, req: Request, user = Depends(ve
     uid, email = user["user_id"], user.get("email")
 
     # ensure Stripe customer exists
-    customer_id = await get_stripe_customer_id(uid)
-    if not customer_id:
-        customer = stripe.Customer.create(email=email, metadata={"user_id": uid})
-        customer_id = customer["id"]
-        await upsert_customer(uid, customer_id)
+    customer_id = await _ensure_current_mode_customer(uid, email)
 
     origin = req.headers.get("origin") or FRONTEND_BASE_URL
 
@@ -238,10 +254,8 @@ async def billing_complete_subscription(body: dict, user = Depends(verify_user))
 
 @app.get("/billing/portal")
 async def billing_portal(user = Depends(verify_user)):
-    cust_id = await get_stripe_customer_id(user["user_id"])
-    if not cust_id:
-        # user hasn’t subscribed yet
-        raise HTTPException(status_code=404, detail="No Stripe customer for this user")
+    # Create/link a customer for the current Stripe mode if needed
+    cust_id = await _ensure_current_mode_customer(user["user_id"], user.get("email"))
 
     session = stripe.billing_portal.Session.create(
         customer=cust_id,
@@ -255,12 +269,19 @@ async def billing_subscription_summary(user = Depends(verify_user)):
     if not cust_id:
         return {"has_subscription": False}
 
-    subs = stripe.Subscription.list(
-        customer=cust_id,
-        status="all",  # active, trialing, past_due etc.
-        limit=1,
-        expand=["data.items.data.price"]
-    )
+    try:
+        subs = stripe.Subscription.list(
+            customer=cust_id,
+            status="all",
+            limit=1,
+            expand=["data.items.data.price"]
+        )
+    except stripe.error.InvalidRequestError as e:
+        # Happens if a Test customer ID is used while the API is on Live keys
+        if "No such customer" in str(e):
+            return {"has_subscription": False}
+        raise
+
     if not subs.data:
         return {"has_subscription": False}
 
