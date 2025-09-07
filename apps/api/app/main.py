@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from .routers import ingest
 from .routers import draft
 from .routers import resume
-from .utils.pricing import PRICE_CATALOG
+from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .auth import verify_supabase_session as verify_user
 from .supabase_db import (upsert_user,
@@ -135,9 +135,13 @@ async def account_credits(user = Depends(verify_user)):
 
 @app.post("/spend")
 async def spend(user = Depends(verify_user)):
+    snap = await get_user_summary(user["user_id"]) or {}
+    plan = (snap.get("plan") or "free").lower()
+    if plan in ("pro", "unlimited"):  # match your PRICE_CATALOG plan string
+        return {"ok": True, "free_uses_remaining": snap.get("free_uses_remaining") or 0}
+
     remaining = await consume_free_use(user["user_id"])
     if remaining < 0:
-        # Not enough credits → 402 so the UI can trigger upgrade
         raise HTTPException(status_code=402, detail="Out of free uses")
     return {"ok": True, "free_uses_remaining": remaining}
 
@@ -222,19 +226,15 @@ async def billing_complete_subscription(body: dict, user = Depends(verify_user))
         raise HTTPException(400, "Missing session_id")
 
     session = stripe.checkout.Session.retrieve(sid)
-
     if session.get("status") != "complete" or session.get("payment_status") != "paid":
         raise HTTPException(400, "Checkout not completed/paid")
 
-    # NEW: persist Stripe customer id for this user
+    # Link Stripe customer to this user (credits/plan handled by webhook on invoice.payment_succeeded)
     cust_id = session.get("customer")
-    print("Stripe session.customer =", cust_id)
     if cust_id:
         await upsert_customer(user["user_id"], cust_id)
 
-    # Keep your existing crediting logic
-    profile = await set_plan_and_grant(user["user_id"], "starter", STARTER_ALLOWANCE)
-    return {"ok": True, "plan": "starter", "credited": STARTER_ALLOWANCE, "user": profile}
+    return {"ok": True}
 
 @app.get("/billing/portal")
 async def billing_portal(user = Depends(verify_user)):
@@ -302,99 +302,113 @@ async def stripe_webhook(request: Request):
     event_type = event["type"]
     event_id   = event["id"]
 
+    # Idempotency guard
     first_time = await insert_webhook_event_once(event_id, event_type)
     if not first_time:
         return {"received": True, "duplicate": True}
+
     print("🔔 Stripe webhook:", event_type)
 
-    # 👉 when an invoice gets paid (initial or renewal), refresh monthly credits
-    
+    # 1) Checkout completed
+    if event_type == "checkout.session.completed":
+        sess = event["data"]["object"]
+        mode = sess.get("mode")
+        md = sess.get("metadata") or {}
+        user_id = md.get("user_id")
+        cust_id = sess.get("customer")
+
+        # a) One-time payment → grant pack credits
+        if mode == "payment" and sess.get("payment_status") == "paid":
+            price_key = md.get("price_key")
+            item = PRICE_CATALOG.get(price_key) if price_key else None
+            if user_id and item and item.get("kind") == "pack":
+                grant = int(item.get("grant") or 0)
+                if grant > 0:
+                    new_total = await _grant_credits(user_id, grant)  # your existing helper
+                    print(f"granted {grant} credits to {user_id} → total {new_total}")
+
+        # b) Subscription checkout → link Stripe customer to user
+        if mode == "subscription" and user_id and cust_id:
+            await upsert_customer(user_id, cust_id)
+            print(f"linked Stripe customer {cust_id} to user {user_id}")
+
+        return {"received": True}
+
+    # 2) Invoice paid → reset monthly allowance for that tier
     if event_type == "invoice.payment_succeeded":
         inv = event["data"]["object"]
         cust_id = inv.get("customer")
         user_id = await get_user_id_by_customer(cust_id) if cust_id else None
-        if user_id:
-            # Try to get the exact price that billed this invoice
+        if not user_id:
+            return {"received": True}
+
+        price_id = None
+        # Try to read price from invoice lines
+        try:
+            lines = inv.get("lines", {}).get("data", [])
+            if lines:
+                price = (lines[0].get("price") or {})
+                price_id = price.get("id")
+        except Exception:
             price_id = None
-            try:
-                lines = inv.get("lines", {}).get("data", [])
-                if lines:
-                    price = (lines[0].get("price") or {})
-                    price_id = price.get("id")
-            except Exception:
-                price_id = None
 
-            # Fallback: retrieve subscription if needed
-            if not price_id and inv.get("subscription"):
-                sub = stripe.Subscription.retrieve(inv["subscription"], expand=["items.data.price"])
-                items = sub.get("items", {}).get("data", [])
-                if items:
-                    price_id = items[0]["price"]["id"]
+        # Fallback: pull subscription item if needed
+        if not price_id and inv.get("subscription"):
+            sub = stripe.Subscription.retrieve(inv["subscription"], expand=["items.data.price"])
+            items = sub.get("items", {}).get("data", [])
+            if items:
+                price_id = items[0]["price"]["id"]
 
-            # Map price_id -> catalog key
-            chosen = None
-            for key, item in PRICE_CATALOG.items():
-                if item.get("stripe_price") == price_id and item.get("kind") == "subscription":
-                    chosen = item
-                    break
+        chosen = resolve_subscription_by_price_id(price_id)
+        if chosen:
+            monthly = int(chosen.get("monthly_allowance") or 0)
+            await set_plan_and_grant(user_id, chosen["plan"], monthly)
+            print(f"reset credits for {user_id} → plan={chosen['plan']} allowance={monthly}")
+        else:
+            # safe fallback
+            monthly = int(PRICE_CATALOG["sub_starter"]["monthly_allowance"])
+            await set_plan_and_grant(user_id, "starter", monthly)
+            print("fallback: starter plan applied")
 
-            if chosen:
-                plan = chosen.get("plan") or "starter"
-                monthly = int(chosen.get("monthly_allowance") or 0)
-                await set_plan_and_grant(user_id, plan, monthly)
-                print(f"reset credits for {user_id} → plan={plan} allowance={monthly}")
-            else:
-                # default behavior if we can’t resolve tier
-                monthly = int(PRICE_CATALOG["sub_starter"]["monthly_allowance"])
-                await set_plan_and_grant(user_id, "starter", monthly)
-                print("fallback: starter plan applied")
+        return {"received": True}
 
-    # (optional) if sub is canceled, mark plan = free (keep remaining credits as-is)
-    if event_type == "customer.subscription.deleted":
-        sub = event["data"]["object"]
-        cust_id = sub.get("customer")
-        user_id = await get_user_id_by_customer(cust_id) if cust_id else None
-        if user_id:
-            await set_plan_and_grant(user_id, "free", 0)
-            print("plan set to free for user", user_id)
-    
+    # 3) Subscription updated → only update plan label, keep credits unchanged
     if event_type == "customer.subscription.updated":
         sub = event["data"]["object"]
         cust_id = sub.get("customer")
         user_id = await get_user_id_by_customer(cust_id) if cust_id else None
-        if user_id:
-            # Find the new price_id
-            items = sub.get("items", {}).get("data", [])
-            price_id = items[0]["price"]["id"] if items else None
+        if not user_id:
+            return {"received": True}
 
-            # Map price_id -> catalog plan
-            plan_key = next(
-                (k for k, v in PRICE_CATALOG.items()
-                if v.get("stripe_price") == price_id and v.get("kind") == "subscription"),
-                None
-            )
-            if plan_key:
-                # Update just the plan label, keep current credits unchanged
-                snap = await get_user_summary(user_id) or {}
-                remaining = int(snap.get("free_uses_remaining") or 0)
-                plan_name = PRICE_CATALOG[plan_key]["plan"]
-                await set_plan_and_grant(user_id, plan_name, remaining)
-                print(f"plan updated (no credit change) → user={user_id} plan={plan_name}")
-    
-    if event_type == "checkout.session.completed":
-        sess = event["data"]["object"]
-        if sess.get("mode") == "payment" and sess.get("payment_status") == "paid":
-            md = sess.get("metadata") or {}
-            user_id = md.get("user_id")         # set in /billing/checkout
-            price_key = md.get("price_key")     # set in /billing/checkout
-            item = PRICE_CATALOG.get(price_key) if price_key else None
+        items = sub.get("items", {}).get("data", [])
+        price_id = items[0]["price"]["id"] if items else None
 
-            if user_id and item and item.get("kind") == "pack":
-                grant = int(item.get("grant") or 0)
-                if grant > 0:
-                    new_total = await _grant_credits(user_id, grant)
-                    print(f"granted {grant} credits to {user_id} → total {new_total}")
+        chosen = resolve_subscription_by_price_id(price_id)
+        if chosen:
+            snap = await get_user_summary(user_id) or {}
+            remaining = int(snap.get("free_uses_remaining") or 0)
+            await set_plan_and_grant(user_id, chosen["plan"], remaining)
+            print(f"plan updated (no credit change) → user={user_id} plan={chosen['plan']}")
 
+        return {"received": True}
+
+    # 4) Subscription canceled → set plan free, PRESERVE credits
+    if event_type == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        cust_id = sub.get("customer")
+        user_id = await get_user_id_by_customer(cust_id) if cust_id else None
+        if not user_id:
+            return {"received": True}
+
+        # Preserve remaining credits; change to 0 if you prefer to wipe.
+        snap = await get_user_summary(user_id) or {}
+        remaining = int(snap.get("free_uses_remaining") or 0)
+        await set_plan_and_grant(user_id, "free", remaining)
+        print(f"plan set to free (credits preserved) for user {user_id}")
+
+        return {"received": True}
+
+    # Default
     return {"received": True}
     
 

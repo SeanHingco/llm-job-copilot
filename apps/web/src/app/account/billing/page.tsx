@@ -19,6 +19,166 @@ type SubSummary = {
     cancel_at_period_end?: boolean;
 };
 
+
+type PackCardProps = {
+  title: string;
+  priceText: string;
+  bullets: string[];
+  priceKey: "pack_100" | "pack_500";
+  onBuy: (key: "pack_100" | "pack_500") => Promise<void> | void;
+  buyingKey: null | "pack_100" | "pack_500";
+  disabled?: boolean;
+  note?: string; 
+};
+
+type SubCardProps = {
+  title: string;
+  priceText: string;
+  bullets: string[];
+  priceKey: 'sub_starter'|'sub_plus'|'sub_pro';
+  isCurrent?: boolean;
+  onChoose: (key: 'sub_starter'|'sub_plus'|'sub_pro') => Promise<void> | void;
+  onManage: () => Promise<void> | void;
+  busy?: boolean;
+  ribbon?: string;
+};
+
+// prices
+const PACK_PRICE_CENTS: Record<"pack_100" | "pack_500", number> = {
+  pack_100: 900,
+  pack_500: 3500,
+};
+
+const SUB_PRICE_CENTS: Record<'sub_starter'|'sub_plus'|'sub_pro', number> = {
+  sub_starter: 900,
+  sub_plus: 1800,
+  sub_pro: 6000,
+};
+
+const PACK_CREDITS: Record<"pack_100" | "pack_500", number> = {
+  pack_100: 100,
+  pack_500: 500,
+};
+
+function usdPerDollar(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+function usd(cents?: number) {
+  if (typeof cents !== "number") return "—";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+    .format(cents / 100);
+}
+
+
+// reusable Pricing Cards
+function PackCard({
+  title,
+  priceText,
+  bullets,
+  priceKey,
+  onBuy,
+  buyingKey,
+  disabled = false,
+  note,
+}: PackCardProps) {
+  const isLoading = buyingKey === priceKey;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <div className="text-lg font-bold text-slate-800">{priceText}</div>
+      </div>
+
+      {note && <div className="mt-1 text-xs text-slate-500">{note}</div>}
+
+      <ul className="mt-3 space-y-1 text-sm text-slate-600">
+        {bullets.map((b) => (
+          <li key={b} className="flex gap-2">
+            <span>•</span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+
+      <button
+        onClick={() => onBuy(priceKey)}
+        disabled={disabled || isLoading}
+        aria-busy={isLoading}
+        className={[
+          "mt-4 w-full rounded-lg px-4 py-2 text-sm font-medium",
+          "bg-indigo-600 text-white hover:bg-indigo-700",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        ].join(" ")}
+      >
+        {isLoading ? "Redirecting…" : "Buy credits"}
+      </button>
+    </div>
+  );
+}
+
+function SubCard({
+  title, priceText, bullets, priceKey, isCurrent = false,
+  onChoose, onManage, busy = false, ribbon,
+}: SubCardProps) {
+  return (
+    <div
+      className={[
+        "relative rounded-xl border bg-white p-4 shadow-sm",
+        isCurrent ? "border-emerald-300 ring-2 ring-emerald-200" : "border-slate-200"
+      ].join(" ")}
+    >
+      {ribbon && (
+        <div className="absolute -top-2 -left-2 rounded-md bg-indigo-600 px-2 py-0.5 text-xs font-medium text-white shadow">
+          {ribbon}
+        </div>
+      )}
+
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <div className="text-lg font-bold text-slate-800">{priceText}/mo</div>
+      </div>
+
+      {isCurrent && (
+        <div className="mt-1 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          Current plan
+        </div>
+      )}
+
+      <ul className="mt-3 space-y-1 text-sm text-slate-600">
+        {bullets.map((b) => (
+          <li key={b} className="flex gap-2"><span>•</span><span>{b}</span></li>
+        ))}
+      </ul>
+
+      {isCurrent ? (
+        <button
+          onClick={() => onManage()}
+          disabled={busy}
+          className="mt-4 w-full rounded-lg px-4 py-2 text-sm font-medium bg-slate-100 text-slate-800 hover:bg-slate-200 disabled:opacity-50"
+        >
+          Manage in portal
+        </button>
+      ) : (
+        <button
+          onClick={() => onChoose(priceKey)}
+          disabled={busy}
+          className="mt-4 w-full rounded-lg px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          Choose plan
+        </button>
+      )}
+    </div>
+  );
+}
+
+
 export default function Billing() {
     const { ready } = useRequireAuth();
     const [me, setMe] = useState<Me | null>(null);
@@ -40,6 +200,15 @@ export default function Billing() {
         sub?.has_subscription && typeof sub.current_period_end === 'number'
             ? new Date(sub.current_period_end * 1000).toLocaleDateString()
             : null;
+
+    // price text
+    const perCredit100 = PACK_PRICE_CENTS.pack_100 / PACK_CREDITS.pack_100 / 100; // dollars/credit
+    const perCredit500 = PACK_PRICE_CENTS.pack_500 / PACK_CREDITS.pack_500 / 100;
+    const savingsPct500 = Math.max(
+        0,
+        Math.round((1 - perCredit500 / perCredit100) * 100)
+    );
+
 
     // styling
     const statBase = 'rounded-lg border bg-slate-50 p-3';
@@ -303,13 +472,13 @@ export default function Billing() {
                     )}
                 </div>
                 <div className='mt-6 flex flex-wrap gap-2'>
-                    {!loading && plan === 'free' && (
+                    {/* {!loading && plan !== 'free' && (
                         <div className="flex flex-wrap gap-2 mt-6">
                             <button className={subBase} onClick={() => subscribe('sub_starter')} >Subscribe: Starter</button>
                             <button className={subBase }onClick={() => subscribe('sub_plus')}>Subscribe: Plus</button>
                             <button className={subBase} onClick={() => subscribe('sub_pro')}>Subscribe: Unlimited</button>
                         </div>
-                    )}
+                    )} */}
                     {!loading && plan !== 'free' && (
                         <div className=
                             'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:opacity-50 disabled:cursor-not-allowed'
@@ -318,28 +487,6 @@ export default function Billing() {
                                 {managing ? 'Opening…' : 'Manage billing'}
                             </button>
                         </div>
-                    )}
-
-                    {!loading && plan !== 'free' &&(
-                        <>
-                        <button
-                            onClick={() => buyCredits("pack_100")}
-                            disabled={buying === "pack_100" || loading || completing}
-                            aria-busy={buying === "pack_100"}
-                            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                            {buying === "pack_100" ? "Redirecting…" : "Buy 100 credits"}
-                        </button>
-
-                        <button
-                            onClick={() => buyCredits("pack_500")}
-                            disabled={buying === "pack_500" || loading || completing}
-                            aria-busy={buying === "pack_500"}
-                            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                            {buying === "pack_500" ? "Redirecting…" : "Buy 500 credits"}
-                        </button>
-                        </>
                     )}
 
                     {!loading && hasSub && (
@@ -362,6 +509,66 @@ export default function Billing() {
                     )}
                 </div>
             </div>
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <SubCard
+                    title="Starter"
+                    priceText={usd(SUB_PRICE_CENTS.sub_starter)}
+                    bullets={["100 credits / month", "Email support", "Prorated on changes"]}
+                    priceKey="sub_starter"
+                    isCurrent={sub?.plan_key === 'sub_starter'}
+                    onChoose={subscribe}
+                    onManage={manageBilling}
+                    busy={subscribing || managing || completing}
+                />
+
+                <SubCard
+                    title="Plus"
+                    priceText={usd(SUB_PRICE_CENTS.sub_plus)}
+                    bullets={["250 credits / month", "Priority support", "Prorated on changes"]}
+                    priceKey="sub_plus"
+                    isCurrent={sub?.plan_key === "sub_plus"}
+                    onChoose={subscribe}
+                    onManage={manageBilling}
+                    ribbon="Most popular"
+                    busy={subscribing || managing || completing}
+                />
+
+                <SubCard
+                    title="Pro"
+                    priceText={usd(SUB_PRICE_CENTS.sub_pro)}
+                    bullets={["Unlimited credits", "Priority support", "Best for heavy use"]}
+                    priceKey="sub_pro"
+                    isCurrent={sub?.plan_key === "sub_pro"}
+                    onChoose={subscribe}
+                    onManage={manageBilling}
+                    busy={subscribing || managing || completing}
+                />
+            </div>
+            {!loading && plan !== 'free' &&(
+                <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <PackCard
+                        title="100-Credit Pack"
+                        priceText={usd(PACK_PRICE_CENTS.pack_100)}
+                        note={`≈ ${usdPerDollar(perCredit100)}/credit`}
+                        bullets={["One-time purchase", "Never expires", "Great for light use"]}
+                        priceKey="pack_100"
+                        onBuy={buyCredits}
+                        buyingKey={buying}
+                        disabled={loading || completing}
+                    />
+                    <PackCard
+                        title="500-Credit Pack"
+                        priceText={usd(PACK_PRICE_CENTS.pack_500)}
+                        note={`≈ ${usdPerDollar(perCredit500)}/credit${savingsPct500 ? ` • Save ${savingsPct500}%` : ""}`}
+                        bullets={["Bulk discount", "Never expires", "Best value for power users"]}
+                        priceKey="pack_500"
+                        onBuy={buyCredits}
+                        buyingKey={buying}
+                        disabled={loading || completing}
+                    />
+                </div>
+            )}
+
         </div>
     );
     
