@@ -265,46 +265,53 @@ async def billing_portal(user = Depends(verify_user)):
 
 @app.get("/billing/subscription-summary")
 async def billing_subscription_summary(user = Depends(verify_user)):
-    cust_id = await get_stripe_customer_id(user["user_id"])
-    if not cust_id:
-        return {"has_subscription": False}
-
     try:
-        subs = stripe.Subscription.list(
-            customer=cust_id,
-            status="all",
-            limit=1,
-            expand=["data.items.data.price"]
-        )
-    except stripe.error.InvalidRequestError as e:
-        # Happens if a Test customer ID is used while the API is on Live keys
-        if "No such customer" in str(e):
+        cust_id = await get_stripe_customer_id(user["user_id"])
+        if not cust_id:
             return {"has_subscription": False}
-        raise
 
-    if not subs.data:
-        return {"has_subscription": False}
+        try:
+            subs = stripe.Subscription.list(
+                customer=cust_id,
+                status="all",  # active, trialing, past_due etc.
+                limit=1,
+                expand=["data.items.data.price"]
+            )
+        except stripe.error.InvalidRequestError as e:
+            # Happens if a Test customer ID is used while the API runs with Live keys
+            if "No such customer" in str(e):
+                return {"has_subscription": False}
+            logger.exception("subscription-summary invalid request: %s", e)
+            return {"has_subscription": False, "error": "stripe_invalid_request"}
 
-    sub = subs.data[0]
-    price_id = sub["items"]["data"][0]["price"]["id"] if sub["items"]["data"] else None
+        if not subs.data:
+            return {"has_subscription": False}
 
-    # Map price_id -> your catalog key
-    plan_key = next(
-        (k for k, v in PRICE_CATALOG.items()
-         if v.get("stripe_price") == price_id and v.get("kind") == "subscription"),
-        None
-    )
-    plan_name = PRICE_CATALOG.get(plan_key, {}).get("plan") if plan_key else None
+        sub = subs.data[0]
+        price_id = sub["items"]["data"][0]["price"]["id"] if sub["items"]["data"] else None
 
-    return {
-        "has_subscription": True,
-        "status": sub["status"],  # active, trialing, past_due, canceled, etc.
-        "plan_key": plan_key,
-        "plan": plan_name,
-        "price_id": price_id,
-        "cancel_at_period_end": sub.get("cancel_at_period_end", False),
-        "current_period_end": sub.get("current_period_end"),  # epoch seconds
-    }
+        # Map price_id -> your catalog key
+        plan_key = next(
+            (k for k, v in PRICE_CATALOG.items()
+             if v.get("stripe_price") == price_id and v.get("kind") == "subscription"),
+            None
+        )
+        plan_name = PRICE_CATALOG.get(plan_key, {}).get("plan") if plan_key else None
+
+        return {
+            "has_subscription": True,
+            "status": sub["status"],
+            "plan_key": plan_key,
+            "plan": plan_name,
+            "price_id": price_id,
+            "cancel_at_period_end": sub.get("cancel_at_period_end", False),
+            "current_period_end": sub.get("current_period_end"),
+        }
+
+    except Exception as e:
+        logger.exception("subscription-summary failed for %s: %s", user["user_id"], e)
+        # Keep the shape simple so the UI doesn’t crash, and CORS headers still apply
+        return {"has_subscription": False, "error": "temporarily_unavailable"}
 
 @app.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
