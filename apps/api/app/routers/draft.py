@@ -24,11 +24,12 @@ PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
 
 class DraftReq(BaseModel):
-    task: Task="bullets"
-    url: HttpUrl
+    task: Task = "bullets"
+    url: Optional[HttpUrl] = None
     q: Optional[str] = None
     job_title: Optional[str] = None
     resume: Optional[str] = ""
+    job_text: Optional[str] = None 
 
 class UserSummary(BaseModel):
     id: str
@@ -38,20 +39,19 @@ class UserSummary(BaseModel):
     created_at: float
 
 async def _run_generation(req: DraftReq) -> dict:
-    ingest_payload = IngestRequest(url=str(req.url) if req.url is not None else "", q=req.q)  # no await
-    result = await ingest_route(ingest_payload)            # one call
-
-    try:
-        ingest_payload = IngestRequest(url=str(req.url) if req.url is not None else "", q=req.q)
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail="Invalid URL") from e
+    ingest_payload = IngestRequest(
+        url=str(req.url) if req.url is not None else "",
+        q=req.q,
+        text=req.job_text or None,   # NEW: allow pasted JD
+    )
+    result = await ingest_route(ingest_payload)
 
     context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
     template = load_task_template(req.task)
     prompt = template.format(job_title=job_title, context=context, resume=req.resume or "")
 
-    bullets = await generate_text(prompt)                  # let errors bubble
+    bullets = await generate_text(prompt)
 
     provider = (os.getenv("LLM_PROVIDER") or "gemini").strip().lower()
     model_env = {"gemini":"GEMINI_MODEL","openai":"OPENAI_MODEL","groq":"GROQ_MODEL","ollama":"OLLAMA_MODEL"}.get(provider)
@@ -157,11 +157,12 @@ async def draft_run(req: DraftReq, _creds: HTTPAuthorizationCredentials = Securi
 
 @router.post("/run-form")
 async def draft_run_form(
-    url: HttpUrl = Form(...),
+    url: Optional[str] = Form(None),         # was: HttpUrl = Form(...)
     q: Optional[str] = Form(None),
     job_title: Optional[str] = Form(None),
     resume: Optional[str] = Form(""),
     resume_file: UploadFile | None = File(None),
+    job_text: Optional[str] = Form(None),    # NEW
     task: Task = Form("bullets"),
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
@@ -191,12 +192,19 @@ async def draft_run_form(
     else:
         resume_text = resume or ""
     
+    # check if job description comes from url or raw text
+    if not (job_text and job_text.strip()) and not (url and url.strip()):
+        raise HTTPException(status_code=400, detail="Provide a job URL or paste the job description.")
+    url_for_req: Optional[str] = url if not (job_text and job_text.strip()) else None
+
+
     req = DraftReq(
         task=task,
-        url=url,
+        url=url_for_req,
         q=q,
         job_title=job_title,
-        resume=resume_text
+        resume=resume_text,
+        job_text=job_text,
     )
 
     data = await _run_generation(req)

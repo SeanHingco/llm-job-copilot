@@ -64,8 +64,9 @@ def _looks_blocked(text: str) -> bool:
 
 # -- Models ---
 class IngestRequest(BaseModel):
-    url: str
+    url: Optional[str] = None
     q: Optional[str] = None
+    text: Optional[str] = None
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -76,9 +77,55 @@ UA = (
 @router.post("")
 async def ingest(req: IngestRequest):
     """
-    Ingest content from a URL.
+    Ingest content from a URL or raw pasted text.
     """
+    # try pasted text
+    pasted = (req.text or "").strip()
+    if pasted:
+        title = "Pasted job description"
+        text = " ".join(pasted.split())
+
+        # same chunk/context pipeline you already use
+        chunks = chunk_text(text, size=800, overlap=120)
+        if req.q:
+            idxs = rank_chunks_by_keywords(req.q, chunks, top_k=3)
+            selected = [chunks[i] for i in idxs]
+        else:
+            idxs = list(range(min(len(chunks), 3)))
+            selected = [chunks[i] for i in idxs]
+
+        first_tail_prev  = chunks[0][-20:] if len(chunks) > 0 else ""
+        second_head_prev = chunks[1][:20]  if len(chunks) > 1 else ""
+        context, citations = build_context(selected, max_chars=3000, max_chunks=5)
+        preview = text[:500]
+
+        final_url = normalize_url(req.url) if req.url else ""
+
+        return {
+            "status": "fetched",
+            "url": req.url or "",
+            "final_url": final_url,
+            "http_status": 200,
+            "content_type": "text/plain",
+            "text_length": len(text),
+            "chunk_count": len(chunks),
+            "context_length": len(context),
+            "preview_length": len(preview),
+            "first_tail": first_tail_prev,
+            "second_head": second_head_prev,
+            "citations": citations,
+            "context_preview": context[:800],
+            "context": context,
+            "query_preview": req.q or "",
+            "title": title,
+            "preview": preview,
+        }
+
     try:
+        target = normalize_url(req.url or "")
+        if not target:
+            raise HTTPException(status_code=400, detail="Provide either a URL or pasted job text.")
+
         target = normalize_url(req.url)
         is_indeed = "indeed." in urlparse(target).netloc.lower()
 

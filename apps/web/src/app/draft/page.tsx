@@ -205,6 +205,7 @@ export default function DraftPage() {
     const [taskStatus, setTaskStatus] = useState<Partial<Record<Task, TaskStatus>>>({});
     const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
     const [credits, setCredits] = useState<number | undefined>(undefined);
+    const [jobText, setJobText] = useState<string>("");
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -355,7 +356,8 @@ export default function DraftPage() {
         try {
             for (const taskToRun of selectedTasks) {
             const fd = new FormData();
-            fd.append("url", url);
+            if (url) fd.append("url", url);
+            if (jobText) fd.append("job_text", jobText);
             fd.append("task", taskToRun);
             if (q) fd.append("q", q);
             if (jobTitle) fd.append("job_title", jobTitle);
@@ -504,7 +506,7 @@ export default function DraftPage() {
 
 
     const outOfCredits = typeof credits === 'number' && credits <= 0;
-    const canSubmit = !!url && !isGenerating && !outOfCredits;
+    const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && !outOfCredits;
 
     return (
         <main className="p-8 space-y-4">
@@ -534,16 +536,19 @@ export default function DraftPage() {
                             required
                         />
 
-                        <label htmlFor="q" className={labelBase}>Query (optional)</label>
-                        <input
-                            id="q"
-                            name="q"
-                            type="text"
-                            placeholder='What are you looking for? e.g. "requirements responsibilities"'
+                        <label htmlFor="job_text" className={labelBase}>Job description (optional)</label>
+                        <textarea
+                            id="job_text"
+                            name="job_text"
+                            rows={8}
+                            placeholder="Paste the full job description here. If provided, we’ll use this instead of fetching the URL."
                             className={inputBase}
-                            value={q}
-                            onChange={(e) => setQ(e.target.value)}
+                            value={jobText}
+                            onChange={(e) => setJobText(e.target.value)}
                         />
+                        <small className="text-neutral-500">
+                            You can provide a URL, paste the description, or both. If pasted, we’ll ignore the URL fetch.
+                        </small>
 
                         <label htmlFor="job_title" className={labelBase}>Job title (optional)</label>
                         <input
