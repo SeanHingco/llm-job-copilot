@@ -33,8 +33,14 @@ app = FastAPI(title="LLM Job Copilot API")
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STARTER_PRICE = os.getenv("STRIPE_PRICE_STARTER_MONTHLY")
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://llm-job-copilot-web-git-dev-seans-projects-46dd2537.vercel.app,https://resume-bender.seanhing.co")
-ALLOWED_ORIGINS = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+_CORS_SOURCES = (
+    os.getenv("CORS_ALLOW_ORIGINS")
+    or os.getenv("CORS_ORIGINS")
+    or "http://localhost:3000,http://127.0.0.1:3000,https://resume-bender.seanhing.co,https://www.resume-bender.seanhing.co"
+)
+ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in _CORS_SOURCES.split(",") if o.strip()]
+VERCEL_PREVIEW_REGEX = r"^https://[a-z0-9-]+-git-[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$"
+
 STARTER_ALLOWANCE = int(os.getenv("MONTHLY_CREDITS_STARTER", "50"))
 DAILY_FREE_CREDITS = int(os.getenv("DAILY_FREE_CREDITS", "6"))
 
@@ -71,7 +77,7 @@ async def _ensure_current_mode_customer(user_id: str, email: str | None) -> str:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https://llm-job-copilot-web-git-[a-z0-9-]+\.vercel\.app$",
+    allow_origin_regex=VERCEL_PREVIEW_REGEX,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
