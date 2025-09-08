@@ -44,6 +44,24 @@ def normalize_url(v: str) -> str:
         return "https://" + s
     return s
 
+def _looks_blocked(text: str) -> bool:
+    """
+    Generic signals that we didn't get a real article/job:
+    very short text or common block/login phrases.
+    Keep it conservative so normal pages still pass.
+    """
+    t = (text or "").lower()
+    if len(t) < 500:  # too little content to be useful
+        return True
+    signals = [
+        "sign in", "log in", "join now", "join to view", "access denied",
+        "enable javascript", "please verify you are a human",
+        "we're checking your browser", "security check", "language", "choose your language",
+    ]
+    hits = sum(1 for s in signals if s in t)
+    # flag only if it's both short-ish and contains multiple signals
+    return len(t) < 1200 and hits >= 2
+
 # -- Models ---
 class IngestRequest(BaseModel):
     url: str
@@ -101,6 +119,11 @@ async def ingest(req: IngestRequest):
 
             raw = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
             text = " ".join(raw.split())
+            if _looks_blocked(text):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
+                )
             chunks = chunk_text(text, size=800, overlap=120)
             if req.q:
                 idxs = rank_chunks_by_keywords(req.q, chunks, top_k=3)
