@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Form, UploadFile, File, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, ValidationError
 from typing import Optional, Literal
 
 from app.utils.llm import generate_text
@@ -38,8 +38,13 @@ class UserSummary(BaseModel):
     created_at: float
 
 async def _run_generation(req: DraftReq) -> dict:
-    ingest_payload = IngestRequest(url=req.url, q=req.q)   # no await
+    ingest_payload = IngestRequest(url=str(req.url) if req.url is not None else "", q=req.q)  # no await
     result = await ingest_route(ingest_payload)            # one call
+
+    try:
+        ingest_payload = IngestRequest(url=str(req.url) if req.url is not None else "", q=req.q)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail="Invalid URL") from e
 
     context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
