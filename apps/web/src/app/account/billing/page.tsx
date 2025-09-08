@@ -544,7 +544,7 @@ export default function Billing() {
                     busy={subscribing || managing || completing}
                 />
             </div>
-            {!loading && plan !== 'free' &&(
+            {!loading && (
                 <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <PackCard
                         title="100-Credit Pack"
