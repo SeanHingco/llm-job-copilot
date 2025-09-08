@@ -36,13 +36,15 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 _CORS_SOURCES = (
     os.getenv("CORS_ALLOW_ORIGINS")
     or os.getenv("CORS_ORIGINS")
-    or "http://localhost:3000,http://127.0.0.1:3000,https://resume-bender.seanhing.co,https://www.resume-bender.seanhing.co"
+    or "https://resume-bender.seanhing.co,http://localhost:3000,http://127.0.0.1:3000"
 )
 ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in _CORS_SOURCES.split(",") if o.strip()]
 VERCEL_PREVIEW_REGEX = r"^https://[a-z0-9-]+-git-[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$"
 
 STARTER_ALLOWANCE = int(os.getenv("MONTHLY_CREDITS_STARTER", "50"))
 DAILY_FREE_CREDITS = int(os.getenv("DAILY_FREE_CREDITS", "6"))
+
+print("CORS allow_origins =", ALLOWED_ORIGINS)
 
 # helpers
 async def _grant_credits(user_id: str, delta: int) -> int:
@@ -77,10 +79,10 @@ async def _ensure_current_mode_customer(user_id: str, email: str | None) -> str:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=VERCEL_PREVIEW_REGEX,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600,
 )
 
 @app.middleware("http")
