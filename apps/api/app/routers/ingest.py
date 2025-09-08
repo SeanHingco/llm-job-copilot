@@ -59,7 +59,7 @@ async def ingest(req: IngestRequest):
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0),
             follow_redirects=True,
-            http2=True,
+            # http2=True,
             headers=BROWSER_HEADERS,
         ) as client:
             # 1) Try the original URL
