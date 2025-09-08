@@ -36,9 +36,17 @@ def _indeed_mobile_fallback(url: str) -> Optional[str]:
     # Keep the original TLD (e.g., indeed.co.uk)
     return f"https://{host}/m/viewjob?jk={jk}"
 
+def normalize_url(v: str) -> str:
+    s = (v or "").strip()
+    if s.startswith("//"):
+        return "https:" + s
+    if not s.startswith(("http://", "https://")):
+        return "https://" + s
+    return s
+
 # -- Models ---
 class IngestRequest(BaseModel):
-    url: HttpUrl
+    url: str
     q: Optional[str] = None
 
 UA = (
@@ -53,7 +61,7 @@ async def ingest(req: IngestRequest):
     Ingest content from a URL.
     """
     try:
-        target = str(req.url)
+        target = normalize_url(req.url)
         is_indeed = "indeed." in urlparse(target).netloc.lower()
 
         async with httpx.AsyncClient(
@@ -74,12 +82,14 @@ async def ingest(req: IngestRequest):
                     resp = await client.get(alt, headers=alt_headers)
 
             ctype = resp.headers.get("content-type", "").lower()
-            if resp.status_code != 200 or "text/html" not in ctype:
-                # Give a friendly, actionable error (UI can prompt to paste text)
+            ok_html = (200 <= resp.status_code < 300) and ("text/html" in ctype or "application/xhtml+xml" in ctype)
+            if not ok_html:
                 raise HTTPException(
                     status_code=422 if is_indeed else 400,
-                    detail="This site blocks automated fetch. Please paste the job description text."
-                           if is_indeed else f"Expected HTML 200, got {resp.status_code} {ctype}",
+                    detail=(
+                        "This site blocks automated fetch. Please paste the job description text."
+                        if is_indeed else f"Expected HTML 2xx, got {resp.status_code} {ctype}"
+                    ),
                 )
 
             final_url = str(resp.url)
