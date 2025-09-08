@@ -341,7 +341,10 @@ export default function DraftPage() {
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
         setTaskStatus(Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }])));
 
-        if (!url) { setGenError("Enter a job URL first."); return; }
+        if (!url && !jobText.trim()) {
+            setError("Provide a job URL or paste the job description.");
+            return;
+        }
         if (selectedTasks.length === 0) { setGenError("Select at least one task."); return; }
 
         if (typeof credits === 'number' && credits <= 0) {
