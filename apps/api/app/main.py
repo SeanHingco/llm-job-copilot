@@ -1,8 +1,8 @@
 # api/app/main.py
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import os, stripe, json, sys, logging
+import os, stripe, json, sys, logging, uuid, time
 from datetime import datetime, timezone
 from .routers import ingest
 from .routers import draft
@@ -21,14 +21,10 @@ from .supabase_db import (upsert_user,
                             set_remaining_and_mark_refill)
 
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    stream=sys.stdout,
-)
-logger = logging.getLogger("api")
 
 app = FastAPI(title="LLM Job Copilot API")
+
+logging.basicConfig(level=logging.INFO)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STARTER_PRICE = os.getenv("STRIPE_PRICE_STARTER_MONTHLY")
@@ -86,12 +82,24 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-async def _errors(request, call_next):
-    try:
-        return await call_next(request)
-    except Exception:
-        logger.exception("Unhandled %s %s", request.method, request.url.path)
-        raise
+async def add_request_id_and_log(request: Request, call_next):
+    rid = request.headers.get("x-request-id", str(uuid.uuid4()))
+    start = time.time()
+    response: Response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    log = {
+        "level": "info",
+        "msg": "request",
+        "request_id": rid,
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "latency_ms": round((time.time() - start) * 1000, 1),
+        "ip": request.client.host if request.client else None,
+        "ua": request.headers.get("user-agent"),
+    }
+    print(json.dumps(log))
+    return response
 
 
 @app.middleware("http")
