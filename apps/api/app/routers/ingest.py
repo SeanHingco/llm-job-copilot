@@ -44,38 +44,36 @@ def normalize_url(v: str) -> str:
         return "https://" + s
     return s
 
-def _looks_blocked(html: str, text: str) -> bool:
+def _looks_blocked(html: str, text: str, debug_url: str = "") -> bool:
     """
-    Return True only when we’re *pretty sure* the page is a login wall / bot block.
-    We avoid false positives by requiring strong signals.
+    Return True only when we’re very likely on a login wall / bot block.
+    Conservative: do NOT block just because the page is short or mentions 'log in'.
     """
     t = (text or "").lower()
     h = (html or "").lower()
 
-    # Strong login/block signals
-    signals = [
-        "sign in", "log in", "join now", "join to view",
-        "access denied", "forbidden", "please verify you are a human",
-        "we're checking your browser", "enable javascript",
-    ]
+    # Strong indicators
+    has_password = ('type="password"' in h) or ('name="password"' in h)
+    has_captcha  = ("captcha" in h) or ("g-recaptcha" in h)
+    has_cf       = "cloudflare" in h or "cf-verify" in h
+
+    # Common copy; keep it from triggering on normal pages
+    signals = ["sign in", "log in", "join now", "join to view", "access denied",
+               "forbidden", "please verify you are a human", "we're checking your browser"]
     hits = sum(1 for s in signals if s in t or s in h)
 
-    # Password field or anti-bot meta is a strong indicator
-    has_password = ('type="password"' in h) or ('name="password"' in h)
-    has_captcha = "captcha" in h or "g-recaptcha" in h
-    has_cloudflare = "cloudflare" in h
+    # --- Debug once per call so we can tune quickly if needed ---
+    try:
+        print(f"INGEST_HEUR len_text={len(t)} hits={hits} pw={has_password} cap={has_captcha} cf={has_cf} url={debug_url}")
+    except Exception:
+        pass
 
-    very_short = len(t) < 120
-    short = len(t) < 300
-    thin = len(t) < 1200
-
-    # Trip if:
-    #  - extremely short *and* at least one strong signal; or
-    #  - short *and* multiple signals; or
-    #  - thin *and* we see explicit password/captcha/cloudflare markers
-    if (very_short and hits >= 1) or (short and hits >= 2):
+    # Only block on explicit walls:
+    #   - password/captcha/cloudflare markers
+    #   - OR essentially no content *and* at least a couple “blocky” phrases
+    if has_password or has_captcha or has_cf:
         return True
-    if thin and (has_password or has_captcha or has_cloudflare):
+    if len(t) < 80 and hits >= 2:
         return True
 
     return False
@@ -186,6 +184,7 @@ async def ingest(req: IngestRequest):
 
 
             final_url = str(resp.url)
+            print("INGEST", resp.status_code, ctype, "len=", len(resp.text), "url=", final_url)
             soup = BeautifulSoup(resp.text, "html.parser")
             title = (soup.title.string or "").strip() if (soup.title and soup.title.string) else ""
 
@@ -194,7 +193,7 @@ async def ingest(req: IngestRequest):
 
             raw = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
             text = " ".join(raw.split())
-            if _looks_blocked(raw_html, text):
+            if _looks_blocked(raw_html, text, final_url):
                 raise HTTPException(
                     status_code=422,
                     detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
