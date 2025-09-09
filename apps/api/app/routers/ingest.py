@@ -44,23 +44,42 @@ def normalize_url(v: str) -> str:
         return "https://" + s
     return s
 
-def _looks_blocked(text: str) -> bool:
+def _looks_blocked(html: str, text: str) -> bool:
     """
-    Generic signals that we didn't get a real article/job:
-    very short text or common block/login phrases.
-    Keep it conservative so normal pages still pass.
+    Return True only when we’re *pretty sure* the page is a login wall / bot block.
+    We avoid false positives by requiring strong signals.
     """
     t = (text or "").lower()
-    if len(t) < 500:  # too little content to be useful
-        return True
+    h = (html or "").lower()
+
+    # Strong login/block signals
     signals = [
-        "sign in", "log in", "join now", "join to view", "access denied",
-        "enable javascript", "please verify you are a human",
-        "we're checking your browser", "security check", "language", "choose your language",
+        "sign in", "log in", "join now", "join to view",
+        "access denied", "forbidden", "please verify you are a human",
+        "we're checking your browser", "enable javascript",
     ]
-    hits = sum(1 for s in signals if s in t)
-    # flag only if it's both short-ish and contains multiple signals
-    return len(t) < 1200 and hits >= 2
+    hits = sum(1 for s in signals if s in t or s in h)
+
+    # Password field or anti-bot meta is a strong indicator
+    has_password = ('type="password"' in h) or ('name="password"' in h)
+    has_captcha = "captcha" in h or "g-recaptcha" in h
+    has_cloudflare = "cloudflare" in h
+
+    very_short = len(t) < 120
+    short = len(t) < 300
+    thin = len(t) < 1200
+
+    # Trip if:
+    #  - extremely short *and* at least one strong signal; or
+    #  - short *and* multiple signals; or
+    #  - thin *and* we see explicit password/captcha/cloudflare markers
+    if (very_short and hits >= 1) or (short and hits >= 2):
+        return True
+    if thin and (has_password or has_captcha or has_cloudflare):
+        return True
+
+    return False
+
 
 # -- Models ---
 class IngestRequest(BaseModel):
@@ -122,8 +141,7 @@ async def ingest(req: IngestRequest):
         }
 
     try:
-        target = normalize_url(req.url or "")
-        if not target:
+        if not req.url:
             raise HTTPException(status_code=400, detail="Provide either a URL or pasted job text.")
 
         target = normalize_url(req.url)
@@ -146,16 +164,26 @@ async def ingest(req: IngestRequest):
                     alt_headers["Referer"] = f"https://{urlparse(target).netloc}/"
                     resp = await client.get(alt, headers=alt_headers)
 
-            ctype = resp.headers.get("content-type", "").lower()
-            ok_html = (200 <= resp.status_code < 300) and ("text/html" in ctype or "application/xhtml+xml" in ctype)
-            if not ok_html:
+            ctype = (resp.headers.get("content-type") or "").lower()
+            raw_html = resp.text
+            text_lc = raw_html[:4000].lower()
+
+            # 1) Clearly blocked statuses → 422
+            if resp.status_code in {401, 403, 406, 429, 451}:
                 raise HTTPException(
-                    status_code=422 if is_indeed else 400,
-                    detail=(
-                        "This site blocks automated fetch. Please paste the job description text."
-                        if is_indeed else f"Expected HTML 2xx, got {resp.status_code} {ctype}"
-                    ),
+                    status_code=422,
+                    detail="This site blocks automated fetch. Please paste the job description text."
                 )
+
+            # 2) Must be 2xx
+            if not (200 <= resp.status_code < 300):
+                raise HTTPException(status_code=400, detail=f"HTTP {resp.status_code}")
+
+            # 3) HTML check: accept if content-type says so OR the body looks like HTML
+            is_html = ("text/html" in ctype) or ("application/xhtml+xml" in ctype) or ("<html" in text_lc)
+            if not is_html:
+                raise HTTPException(status_code=400, detail=f"Expected HTML, got {resp.status_code} {ctype}")
+
 
             final_url = str(resp.url)
             soup = BeautifulSoup(resp.text, "html.parser")
@@ -166,7 +194,7 @@ async def ingest(req: IngestRequest):
 
             raw = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
             text = " ".join(raw.split())
-            if _looks_blocked(text):
+            if _looks_blocked(raw_html, text):
                 raise HTTPException(
                     status_code=422,
                     detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
