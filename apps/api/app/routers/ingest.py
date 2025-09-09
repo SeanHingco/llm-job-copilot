@@ -36,6 +36,117 @@ def _indeed_mobile_fallback(url: str) -> Optional[str]:
     # Keep the original TLD (e.g., indeed.co.uk)
     return f"https://{host}/m/viewjob?jk={jk}"
 
+def _clean_text(s: str) -> str:
+    return " ".join((s or "").split())
+
+def _extract_from_json_ld(html: str) -> list[str]:
+    """
+    Look for <script type="application/ld+json"> and pull likely description fields.
+    Works for many job boards (incl. Ashby) that embed JobPosting JSON.
+    """
+    out: list[str] = []
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+            raw = tag.string or tag.get_text("", strip=True)
+            if not raw:
+                continue
+            # Some sites put multiple JSON objects or invalid trailing commas—be defensive.
+            candidates = []
+            try:
+                candidates = [json.loads(raw)]
+            except Exception:
+                # try to parse line-by-line arrays
+                continue
+
+            def dig(node):
+                if isinstance(node, dict):
+                    for k, v in node.items():
+                        if isinstance(v, str) and k.lower() in ("description", "jobdescription", "summary", "text", "content"):
+                            # Strip any HTML inside description
+                            out.append(_clean_text(BeautifulSoup(v, "html.parser").get_text(" ", strip=True)))
+                        else:
+                            dig(v)
+                elif isinstance(node, list):
+                    for item in node:
+                        dig(item)
+
+            for c in candidates:
+                dig(c)
+    except Exception:
+        pass
+    # de-dupe and keep non-trivial chunks
+    uniq = []
+    seen = set()
+    for s in out:
+        if len(s) > 150 and s not in seen:
+            uniq.append(s); seen.add(s)
+    return uniq
+
+def _extract_from_next_data(html: str) -> list[str]:
+    """
+    For Next.js apps (script#__NEXT_DATA__), walk JSON for long 'description'-like strings.
+    """
+    out: list[str] = []
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        tag = soup.find("script", id="__NEXT_DATA__")
+        if not tag:
+            return out
+        raw = tag.string or tag.get_text("", strip=True)
+        if not raw:
+            return out
+        data = json.loads(raw)
+
+        keys = {"description", "jobdescription", "summary", "content", "body", "html"}
+        MIN_LEN = 200
+
+        def dig(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if isinstance(v, str) and k.lower() in keys and len(v) >= MIN_LEN:
+                        out.append(_clean_text(BeautifulSoup(v, "html.parser").get_text(" ", strip=True)))
+                    else:
+                        dig(v)
+            elif isinstance(node, list):
+                for item in node:
+                    dig(item)
+
+        dig(data)
+    except Exception:
+        pass
+    # de-dupe
+    uniq = []
+    seen = set()
+    for s in out:
+        if s not in seen:
+            uniq.append(s); seen.add(s)
+    return uniq
+
+def _extract_text_robust(html: str) -> tuple[str, str]:
+    """
+    Returns (title, text) using: basic soup → JSON-LD → __NEXT_DATA__ fallbacks.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    title = (soup.title.string or "").strip() if (soup.title and soup.title.string) else ""
+
+    # Basic visible text
+    for tag in soup(["script", "style", "noscript", "template"]):
+        tag.decompose()
+    base_text = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
+    base_text = _clean_text(base_text)
+
+    # If the base text is thin, try structured fallbacks
+    if len(base_text) < 300:
+        parts = _extract_from_json_ld(html)
+        if not parts:
+            parts = _extract_from_next_data(html)
+        if parts:
+            return title, _clean_text(" ".join(parts))
+
+    return title, base_text
+
+
 def normalize_url(v: str) -> str:
     s = (v or "").strip()
     if s.startswith("//"):
@@ -45,37 +156,29 @@ def normalize_url(v: str) -> str:
     return s
 
 def _looks_blocked(html: str, text: str, debug_url: str = "") -> bool:
-    """
-    Return True only when we’re very likely on a login wall / bot block.
-    Conservative: do NOT block just because the page is short or mentions 'log in'.
-    """
     t = (text or "").lower()
     h = (html or "").lower()
 
-    # Strong indicators
     has_password = ('type="password"' in h) or ('name="password"' in h)
-    has_captcha  = ("captcha" in h) or ("g-recaptcha" in h)
-    has_cf       = "cloudflare" in h or "cf-verify" in h
+    # Many legit pages load recaptcha script — don't block on this alone.
+    has_captcha  = ("captcha" in h or "g-recaptcha" in h)
+    shows_challenge = "verify you are a human" in h or "challenge" in h
 
-    # Common copy; keep it from triggering on normal pages
-    signals = ["sign in", "log in", "join now", "join to view", "access denied",
-               "forbidden", "please verify you are a human", "we're checking your browser"]
+    signals = ["access denied", "forbidden", "join to view"]
     hits = sum(1 for s in signals if s in t or s in h)
 
-    # --- Debug once per call so we can tune quickly if needed ---
     try:
-        print(f"INGEST_HEUR len_text={len(t)} hits={hits} pw={has_password} cap={has_captcha} cf={has_cf} url={debug_url}")
+        print(f"INGEST_HEUR len_text={len(t)} hits={hits} pw={has_password} cap={has_captcha} ch={shows_challenge} url={debug_url}")
     except Exception:
         pass
 
-    # Only block on explicit walls:
-    #   - password/captcha/cloudflare markers
-    #   - OR essentially no content *and* at least a couple “blocky” phrases
-    if has_password or has_captcha or has_cf:
+    # Only block when we’re confident:
+    if has_password:
         return True
-    if len(t) < 80 and hits >= 2:
+    if shows_challenge and has_captcha and len(t) < 120:
         return True
-
+    if len(t) < 80 and hits >= 1:
+        return True
     return False
 
 
@@ -164,6 +267,13 @@ async def ingest(req: IngestRequest):
 
             ctype = (resp.headers.get("content-type") or "").lower()
             raw_html = resp.text
+            title, text = _extract_text_robust(raw_html)
+
+            if _looks_blocked(raw_html, text, final_url):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
+                )
             text_lc = raw_html[:4000].lower()
 
             # 1) Clearly blocked statuses → 422
