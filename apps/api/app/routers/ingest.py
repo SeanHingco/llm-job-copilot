@@ -7,6 +7,7 @@ from app.utils.context import build_context
 from app.utils.retrieve import rank_chunks_by_keywords
 from urllib.parse import urlparse, parse_qs
 from typing import Optional
+import json
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -124,26 +125,16 @@ def _extract_from_next_data(html: str) -> list[str]:
     return uniq
 
 def _extract_text_robust(html: str) -> tuple[str, str]:
-    """
-    Returns (title, text) using: basic soup → JSON-LD → __NEXT_DATA__ fallbacks.
-    """
     soup = BeautifulSoup(html, "html.parser")
     title = (soup.title.string or "").strip() if (soup.title and soup.title.string) else ""
-
-    # Basic visible text
-    for tag in soup(["script", "style", "noscript", "template"]):
+    for tag in soup(["script", "style", "template"]):  # ← keep 'noscript'
         tag.decompose()
     base_text = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
     base_text = _clean_text(base_text)
-
-    # If the base text is thin, try structured fallbacks
     if len(base_text) < 300:
-        parts = _extract_from_json_ld(html)
-        if not parts:
-            parts = _extract_from_next_data(html)
+        parts = _extract_from_json_ld(html) or _extract_from_next_data(html)
         if parts:
             return title, _clean_text(" ".join(parts))
-
     return title, base_text
 
 
@@ -199,13 +190,12 @@ async def ingest(req: IngestRequest):
     """
     Ingest content from a URL or raw pasted text.
     """
-    # try pasted text
+    # --- pasted text path (unchanged) ---
     pasted = (req.text or "").strip()
     if pasted:
         title = "Pasted job description"
         text = " ".join(pasted.split())
 
-        # same chunk/context pipeline you already use
         chunks = chunk_text(text, size=800, overlap=120)
         if req.q:
             idxs = rank_chunks_by_keywords(req.q, chunks, top_k=3)
@@ -220,7 +210,6 @@ async def ingest(req: IngestRequest):
         preview = text[:500]
 
         final_url = normalize_url(req.url) if req.url else ""
-
         return {
             "status": "fetched",
             "url": req.url or "",
@@ -241,23 +230,22 @@ async def ingest(req: IngestRequest):
             "preview": preview,
         }
 
+    # --- URL path ---
+    if not req.url:
+        raise HTTPException(status_code=400, detail="Provide either a URL or pasted job text.")
+
+    target = normalize_url(req.url)
+    final_url = target  # ← init early so it always exists
+    is_indeed = "indeed." in urlparse(target).netloc.lower()
+
     try:
-        if not req.url:
-            raise HTTPException(status_code=400, detail="Provide either a URL or pasted job text.")
-
-        target = normalize_url(req.url)
-        is_indeed = "indeed." in urlparse(target).netloc.lower()
-
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0),
             follow_redirects=True,
-            # http2=True,
             headers=BROWSER_HEADERS,
         ) as client:
-            # 1) Try the original URL
             resp = await client.get(target)
 
-            # 2) If Indeed blocks (403), try the mobile page with a Referer
             if resp.status_code == 403 and is_indeed:
                 alt = _indeed_mobile_fallback(target)
                 if alt:
@@ -267,47 +255,36 @@ async def ingest(req: IngestRequest):
 
             ctype = (resp.headers.get("content-type") or "").lower()
             raw_html = resp.text
-            title, text = _extract_text_robust(raw_html)
-
-            if _looks_blocked(raw_html, text, final_url):
-                raise HTTPException(
-                    status_code=422,
-                    detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
-                )
+            final_url = str(resp.url)  # ← update after redirects
             text_lc = raw_html[:4000].lower()
 
-            # 1) Clearly blocked statuses → 422
+            # 1) obvious blocks → 422
             if resp.status_code in {401, 403, 406, 429, 451}:
                 raise HTTPException(
                     status_code=422,
                     detail="This site blocks automated fetch. Please paste the job description text."
                 )
-
-            # 2) Must be 2xx
+            # 2) must be 2xx
             if not (200 <= resp.status_code < 300):
                 raise HTTPException(status_code=400, detail=f"HTTP {resp.status_code}")
-
-            # 3) HTML check: accept if content-type says so OR the body looks like HTML
+            # 3) looks like HTML?
             is_html = ("text/html" in ctype) or ("application/xhtml+xml" in ctype) or ("<html" in text_lc)
             if not is_html:
                 raise HTTPException(status_code=400, detail=f"Expected HTML, got {resp.status_code} {ctype}")
 
+            print("INGEST", resp.status_code, ctype, "len=", len(raw_html), "url=", final_url)
 
-            final_url = str(resp.url)
-            print("INGEST", resp.status_code, ctype, "len=", len(resp.text), "url=", final_url)
-            soup = BeautifulSoup(resp.text, "html.parser")
-            title = (soup.title.string or "").strip() if (soup.title and soup.title.string) else ""
+            # Extract once (this already falls back to JSON-LD / __NEXT_DATA__)
+            title, text = _extract_text_robust(raw_html)
 
-            for tag in soup(["script", "style", "noscript", "template"]):
-                tag.decompose()
-
-            raw = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
-            text = " ".join(raw.split())
+            # Gentle blocker check (now final_url is defined)
             if _looks_blocked(raw_html, text, final_url):
                 raise HTTPException(
                     status_code=422,
                     detail="Could not access the full job description (site likely requires login or blocks automated fetch). Please paste the job description text."
                 )
+
+            # Continue with your pipeline
             chunks = chunk_text(text, size=800, overlap=120)
             if req.q:
                 idxs = rank_chunks_by_keywords(req.q, chunks, top_k=3)
@@ -343,4 +320,5 @@ async def ingest(req: IngestRequest):
         "title": title,
         "preview": preview,
     }
+
     
