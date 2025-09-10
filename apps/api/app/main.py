@@ -136,6 +136,11 @@ async def _limit_body_size(request, call_next):
 def health():
     return {"ok": True}
 
+@app.head("/health")
+def health_head():
+    # No body needed for HEAD; 200 is enough
+    return Response(status_code=200)
+
 @app.get("/me")
 async def me(user = Depends(verify_user)):
     return await get_user_summary(user["user_id"])
