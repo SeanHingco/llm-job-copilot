@@ -173,7 +173,11 @@ async def draft_run_form(
         raise HTTPException(
             status_code=429,
             detail="Too many requests. Please wait a moment.",
-            headers={"Retry-After": str(retry)},
+            headers={
+                "Retry-After": str(retry),
+                "X-RateLimit-Limit": str(RL_RUN_FORM_PER_MIN),
+                "X-RateLimit-Remaining": "0"
+            }
         )
 
     profile: UserSummary = await get_user_summary(user["user_id"])

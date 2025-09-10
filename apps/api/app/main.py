@@ -9,6 +9,7 @@ from .routers import draft
 from .routers import resume
 from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
+from .utils.security_headers import SecurityHeadersMiddleware
 from .auth import verify_supabase_session as verify_user
 from .supabase_db import (upsert_user,
                             get_user_summary,
@@ -81,6 +82,8 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
     max_age=3600,
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 @app.middleware("http")
 async def add_request_id_and_log(request: Request, call_next):
