@@ -473,6 +473,39 @@ export default function DraftPage() {
         return JSON.stringify(j, null, 2);
     }
 
+    function normalizeAnyJSON(obj: any): AnyJSON | null {
+        if (!obj || typeof obj !== "object") return null;
+
+        // v2 Bullets: { items: [{ text, ... }] }
+        if (Array.isArray(obj.items) && obj.items.every((x: any) => typeof x?.text === "string")) {
+            const bullets = obj.items.map((x: any) => ({
+            text: String(x.text),
+            job_chunks: Array.isArray(x.job_chunks) ? x.job_chunks : undefined,
+            }));
+            return { bullets } as BulletsJSON;
+        }
+
+        // v2 Talking Points: { items: [{ text, type?, job_chunks? }], notes?: [] }
+        if (Array.isArray(obj.items) && obj.items.some((x: any) => typeof x?.text === "string" || x?.type)) {
+            const points = obj.items
+            .filter((x: any) => typeof x?.text === "string")
+            .map((x: any) => ({
+                text: String(x.text),
+                type: x.type as TalkingJSON["points"][number]["type"] | undefined,
+                job_chunks: Array.isArray(x.job_chunks) ? x.job_chunks : undefined,
+            }));
+            const notes = Array.isArray(obj.notes) ? obj.notes.map(String) : undefined;
+            return { points, notes } as TalkingJSON;
+        }
+
+        // Already legacy shapes? pass through.
+        if (Array.isArray((obj as any).bullets)) return obj as BulletsJSON;
+        if (Array.isArray((obj as any).points))  return obj as TalkingJSON;
+        if (typeof (obj as any).subject === "string" && Array.isArray((obj as any).body_paragraphs)) return obj as CoverJSON;
+        if (typeof (obj as any).coverage === "number" && Array.isArray((obj as any).strengths)) return obj as AlignJSON;
+
+        return null;
+    }
 
     function parseJSON(s: string | null | undefined): AnyJSON | null {
         if (!s || typeof s !== "string") return null;
@@ -482,29 +515,29 @@ export default function DraftPage() {
         if (txt.startsWith("```")) {
             const parts = txt.split("```");
             if (parts.length >= 3) {
-            // parts[1] might be "json\n{...}" or just "{...}"
             const inner = parts[1].trim();
-            // If there's a language tag on the first line, drop it
             const nl = inner.indexOf("\n");
             txt = (nl > -1 && /^[a-z]+$/i.test(inner.slice(0, nl).trim()))
                 ? inner.slice(nl + 1).trim()
                 : inner;
             }
         }
+
+        // Try bracket-sliced candidate first, then the whole string
+        const candidates: string[] = [];
         const firstBrace = txt.indexOf("{");
         const lastBrace  = txt.lastIndexOf("}");
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            const candidate = txt.slice(firstBrace, lastBrace + 1);
-            try {
-            return JSON.parse(candidate) as AnyJSON;
-            } catch { /* fall through */ }
-        }
+        if (firstBrace !== -1 && lastBrace !== -1) candidates.push(txt.slice(firstBrace, lastBrace + 1));
+        candidates.push(txt);
 
-        try {
-            return JSON.parse(txt) as AnyJSON;
-        } catch {
-            return null;
+        for (const c of candidates) {
+            try {
+            const obj = JSON.parse(c);
+            const normalized = normalizeAnyJSON(obj);   // NEW: normalize to legacy shapes
+            if (normalized) return normalized;
+            } catch { /* try next candidate */ }
         }
+        return null;
     }
 
 
