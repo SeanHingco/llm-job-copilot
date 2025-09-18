@@ -160,6 +160,17 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 function isBullets(j: unknown): j is BulletsJSON {
   return isObject(j) && Array.isArray((j as { bullets?: unknown }).bullets);
 }
+function isV2BulletItem(v: unknown): v is { text: string; job_chunks?: number[] } {
+  if (!isObject(v)) return false;
+  const text = v["text"];
+  const job_chunks = v["job_chunks"];
+  if (typeof text !== "string") return false;
+  if (job_chunks !== undefined && !isNumberArray(job_chunks)) return false;
+  return true;
+}
+
+type TalkingType = "strength" | "emphasis" | "reminder";
+const TALKING_TYPES = new Set<TalkingType>(["strength", "emphasis", "reminder"]);
 function isTalking(j: unknown): j is TalkingJSON {
   return isObject(j) && Array.isArray((j as { points?: unknown }).points);
 }
@@ -170,12 +181,35 @@ function isCover(j: unknown): j is CoverJSON {
     Array.isArray((j as { body_paragraphs?: unknown }).body_paragraphs)
   );
 }
+function isV2TalkingItem(v: unknown): v is {
+  text: string; type?: TalkingType; job_chunks?: number[];
+} {
+  if (!isV2BulletItem(v)) return false;
+  const type = (v as Record<string, unknown>)["type"];
+  if (type !== undefined && !(typeof type === "string" && TALKING_TYPES.has(type as TalkingType))) {
+    return false;
+  }
+  return true;
+}
+
 function isAlign(j: unknown): j is AlignJSON {
   return (
     isObject(j) &&
     typeof (j as { coverage?: unknown }).coverage === "number" &&
     Array.isArray((j as { strengths?: unknown }).strengths)
   );
+}
+const isNumberArray = (v: unknown): v is number[] =>
+  Array.isArray(v) && v.every((n) => typeof n === "number");
+
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((s) => typeof s === "string");
+
+function hasKey<K extends string>(
+  o: Record<string, unknown>,
+  k: K
+): o is Record<K, unknown> & Record<string, unknown> {
+  return k in o;
 }
 
 
@@ -474,6 +508,76 @@ export default function DraftPage() {
     }
 
 
+    function normalizeAnyJSON(obj: unknown): AnyJSON | null {
+        if (!isObject(obj)) return null;
+
+        // --- v2 detection: root has `items` array
+        if (hasKey(obj, "items") && Array.isArray(obj.items)) {
+            const items = obj.items as unknown[];
+
+            // If any item has a valid `type` OR root has notes[], treat as Talking v2
+            const looksTalking =
+            items.some((it) => isObject(it) && "type" in it) ||
+            (hasKey(obj, "notes") && isStringArray(obj.notes));
+
+            if (looksTalking) {
+            const points = items
+                .filter(isV2TalkingItem)
+                .map((x) => ({
+                text: x.text,
+                type: (isObject(x) && (x["type"] as TalkingType | undefined)) ?? undefined,
+                job_chunks: (isObject(x) && (x["job_chunks"] as number[] | undefined)) ?? undefined,
+                }));
+            const notes = hasKey(obj, "notes") && isStringArray(obj.notes) ? obj.notes : undefined;
+            if (points.length > 0) return { points, notes } as TalkingJSON;
+            }
+
+            // Otherwise treat as Bullets v2
+            const bullets = items.filter(isV2BulletItem).map((x) => ({
+            text: x.text,
+            job_chunks: x.job_chunks,
+            }));
+            if (bullets.length > 0) return { bullets } as BulletsJSON;
+        }
+
+        // --- Legacy passthroughs (v1 JSON shapes you already support)
+        if (hasKey(obj, "bullets") && Array.isArray(obj.bullets)) {
+            // Be defensive: ensure texts are strings
+            const ok = (obj.bullets as unknown[]).every(
+            (b) => isObject(b) && typeof b["text"] === "string"
+            );
+            if (ok) return obj as unknown as BulletsJSON;
+        }
+
+        if (hasKey(obj, "points") && Array.isArray(obj.points)) {
+            const ok = (obj.points as unknown[]).every(
+            (p) => isObject(p) && typeof p["text"] === "string"
+            );
+            if (ok) return obj as unknown as TalkingJSON;
+        }
+
+        if (
+            hasKey(obj, "subject") &&
+            typeof obj.subject === "string" &&
+            hasKey(obj, "body_paragraphs") &&
+            Array.isArray(obj.body_paragraphs)
+        ) {
+            return obj as unknown as CoverJSON;
+        }
+
+        if (
+            hasKey(obj, "coverage") &&
+            typeof obj.coverage === "number" &&
+            hasKey(obj, "strengths") &&
+            Array.isArray(obj.strengths)
+        ) {
+            return obj as unknown as AlignJSON;
+        }
+
+        return null;
+    }
+
+
     function parseJSON(s: string | null | undefined): AnyJSON | null {
         if (!s || typeof s !== "string") return null;
         let txt = s.trim();
@@ -482,29 +586,30 @@ export default function DraftPage() {
         if (txt.startsWith("```")) {
             const parts = txt.split("```");
             if (parts.length >= 3) {
-            // parts[1] might be "json\n{...}" or just "{...}"
             const inner = parts[1].trim();
-            // If there's a language tag on the first line, drop it
             const nl = inner.indexOf("\n");
             txt = (nl > -1 && /^[a-z]+$/i.test(inner.slice(0, nl).trim()))
                 ? inner.slice(nl + 1).trim()
                 : inner;
             }
         }
+
+        const candidates: string[] = [];
         const firstBrace = txt.indexOf("{");
         const lastBrace  = txt.lastIndexOf("}");
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            const candidate = txt.slice(firstBrace, lastBrace + 1);
-            try {
-            return JSON.parse(candidate) as AnyJSON;
-            } catch { /* fall through */ }
-        }
+        if (firstBrace !== -1 && lastBrace !== -1) candidates.push(txt.slice(firstBrace, lastBrace + 1));
+        candidates.push(txt);
 
-        try {
-            return JSON.parse(txt) as AnyJSON;
-        } catch {
-            return null;
+        for (const c of candidates) {
+            try {
+            const parsedUnknown = JSON.parse(c) as unknown;
+            const normalized = normalizeAnyJSON(parsedUnknown);
+            if (normalized) return normalized;
+            } catch {
+            // try next candidate
+            }
         }
+        return null;
     }
 
 
