@@ -91,26 +91,24 @@ async def _run_generation(req: DraftReq) -> dict:
     }
 
 def fill_prompt(template: str, *, job_title: str, context: str, resume: str, jd_keywords: str = "") -> str:
-    """
-    1) Replace $variables (Template.safe_substitute)
-    2) Then replace {variables} (safe_format)
-    Preserves JSON braces (thanks to {{ }} in your prompt files) and leaves unknown tokens untouched.
-    """
-    # Step 1: $… placeholders
+    # 1) $… placeholders
     t = Template(template).safe_substitute(
         job_title=job_title,
         context=context,
         resume=resume,
         jd_keywords=jd_keywords,
     )
-    # Step 2: {…} placeholders (if any)
-    return safe_format(
-        t,
-        job_title=job_title,
-        context=context,
-        resume=resume,
-        jd_keywords=jd_keywords,
-    )
+    # 2) literal {…} tokens you intentionally support
+    # (avoids str.format parsing of arbitrary braces in prose/JSON)
+    mapping = {
+        "{job_title}": job_title,
+        "{context}": context,
+        "{resume}": resume,
+        "{jd_keywords}": jd_keywords,
+    }
+    for k, v in mapping.items():
+        t = t.replace(k, v)
+    return t
 
 
 
