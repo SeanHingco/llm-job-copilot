@@ -16,6 +16,7 @@ from app.supabase_db import get_user_summary, consume_free_use
 
 import os
 from pathlib import Path
+from string import Template
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
@@ -38,6 +39,14 @@ class UserSummary(BaseModel):
     free_uses_remaining: int
     created_at: float
 
+
+def safe_format(template: str, **kwargs) -> str:
+    """Format only known {tokens}; leave unknown {…} intact (so JSON/code stays valid)."""
+    class _SafeDict(dict):
+        def __missing__(self, key):
+            return "{" + key + "}"
+    return template.format_map(_SafeDict(**kwargs))
+
 async def _run_generation(req: DraftReq) -> dict:
     ingest_payload = IngestRequest(
         url=str(req.url) if req.url is not None else "",
@@ -49,7 +58,18 @@ async def _run_generation(req: DraftReq) -> dict:
     context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
     template = load_task_template(req.task)
-    prompt = template.format(job_title=job_title, context=context, resume=req.resume or "")
+    jd_keywords = ""
+    # if your ingest adds something like result["target_keywords"], you can do:
+    # if isinstance(result.get("target_keywords"), list):
+    #     jd_keywords = ", ".join(map(str, result["target_keywords"]))
+
+    prompt = fill_prompt(
+        template,
+        job_title=job_title,
+        context=context,
+        resume=req.resume or "",
+        jd_keywords=jd_keywords,
+    )
 
     bullets = await generate_text(prompt)
 
@@ -70,6 +90,27 @@ async def _run_generation(req: DraftReq) -> dict:
         },
     }
 
+def fill_prompt(template: str, *, job_title: str, context: str, resume: str, jd_keywords: str = "") -> str:
+    """
+    1) Replace $variables (Template.safe_substitute)
+    2) Then replace {variables} (safe_format)
+    Preserves JSON braces (thanks to {{ }} in your prompt files) and leaves unknown tokens untouched.
+    """
+    # Step 1: $… placeholders
+    t = Template(template).safe_substitute(
+        job_title=job_title,
+        context=context,
+        resume=resume,
+        jd_keywords=jd_keywords,
+    )
+    # Step 2: {…} placeholders (if any)
+    return safe_format(
+        t,
+        job_title=job_title,
+        context=context,
+        resume=resume,
+        jd_keywords=jd_keywords,
+    )
 
 
 
