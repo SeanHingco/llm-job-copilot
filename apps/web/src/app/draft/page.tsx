@@ -192,6 +192,50 @@ function isV2TalkingItem(v: unknown): v is {
   return true;
 }
 
+function isV2Bullet(v: unknown): v is {
+  text: string;
+  job_chunks?: number[];
+  evidence?: string;
+  keywords?: string[];
+  rationale?: string;
+  transferable?: boolean;
+} {
+  if (!isObject(v)) return false;
+  const text = v["text"];
+  if (typeof text !== "string") return false;
+  const job_chunks = v["job_chunks"];
+  if (job_chunks !== undefined && !isNumberArray(job_chunks)) return false;
+  const evidence = v["evidence"];
+  if (evidence !== undefined && typeof evidence !== "string") return false;
+  const keywords = v["keywords"];
+  if (keywords !== undefined && !isStringArray(keywords)) return false;
+  const rationale = v["rationale"];
+  if (rationale !== undefined && typeof rationale !== "string") return false;
+  const transferable = v["transferable"];
+  if (transferable !== undefined && typeof transferable !== "boolean") return false;
+  return true;
+}
+
+function hasAtsSummary(j: unknown): j is {
+  ats_summary: {
+    covered_keywords?: string[];
+    missing_keywords?: string[];
+    coverage_detail?: {
+      by_keyword?: { keyword: string; count: number; bullets: number[] }[];
+      duplicates?: string[];
+      coverage_rate?: number;
+    };
+  };
+} {
+  if (!isObject(j)) return false;
+  const a = j["ats_summary"];
+  if (!isObject(a)) return false;
+  // Light checks (optional fields allowed)
+  if (a["covered_keywords"] !== undefined && !isStringArray(a["covered_keywords"])) return false;
+  if (a["missing_keywords"] !== undefined && !isStringArray(a["missing_keywords"])) return false;
+  return true;
+}
+
 function isAlign(j: unknown): j is AlignJSON {
   return (
     isObject(j) &&
@@ -474,8 +518,49 @@ export default function DraftPage() {
         const j = r.json as AnyJSON;
 
         if (isBullets(j)) {
-            console.log("bulleted");
-            return j.bullets.map((b, i) => `• ${b.text}${b.job_chunks?.length ? ` [${b.job_chunks.join(",")}]` : ""}`).join("\n");
+            // Detect v2 by presence of richer bullet fields or ats_summary
+            const arr = j.bullets as unknown[];
+            const looksV2 = arr.some(isV2Bullet) && arr.some((b) => isObject(b) && ("evidence" in b || "keywords" in b || "rationale" in b || "transferable" in b))
+                            || hasAtsSummary(j);
+
+            if (looksV2) {
+                // Render v2 bullets with sub-details
+                const lines = (arr.filter(isV2Bullet)).map((b, i) => {
+                const top = `• ${b.text}${b.job_chunks?.length ? ` [${b.job_chunks.join(",")}]` : ""}`;
+                const evid = b.evidence ? `  evidence: ${b.evidence}` : "";
+                const kw   = b.keywords && b.keywords.length ? `  keywords: ${b.keywords.join(", ")}` : "";
+                const why  = b.rationale ? `  why: ${b.rationale}` : "";
+                const tr   = typeof b.transferable === "boolean" ? `  transferable: ${b.transferable ? "true" : "false"}` : "";
+                return [top, evid, kw, why, tr].filter(Boolean).join("\n");
+                }).join("\n");
+
+                // Append ATS summary if provided
+                let summary = "";
+                if (hasAtsSummary(j)) {
+                const a = j.ats_summary;
+                const covered = a.covered_keywords && a.covered_keywords.length ? `  covered_keywords: ${a.covered_keywords.join(", ")}` : "";
+                const missing = a.missing_keywords && a.missing_keywords.length ? `  missing_keywords: ${a.missing_keywords.join(", ")}` : "";
+                const rate = isObject(a.coverage_detail) && typeof a.coverage_detail["coverage_rate"] === "number"
+                    ? `  coverage_rate: ${String(a.coverage_detail["coverage_rate"])}` : "";
+                const bykw = isObject(a.coverage_detail) && Array.isArray(a.coverage_detail["by_keyword"])
+                    ? `  by_keyword:\n${(a.coverage_detail["by_keyword"] as Array<Record<string, unknown>>)
+                        .map((r) => `    - ${String(r["keyword"])} (count ${String(r["count"])}) bullets: ${Array.isArray(r["bullets"]) ? (r["bullets"] as number[]).join(", ") : ""}`)
+                        .join("\n")}`
+                    : "";
+                const dup = isObject(a.coverage_detail) && isStringArray(a.coverage_detail["duplicates"])
+                    ? `  duplicates: ${a.coverage_detail["duplicates"].join(", ")}`
+                    : "";
+                const parts = [covered, missing, rate, bykw, dup].filter(Boolean);
+                if (parts.length) summary = ["", "ATS summary:", ...parts].join("\n");
+                }
+
+                return summary ? `${lines}\n${summary}` : lines;
+            }
+
+            // Legacy (v1) rendering
+            return j.bullets
+                .map((b) => `• ${b.text}${b.job_chunks?.length ? ` [${b.job_chunks.join(",")}]` : ""}`)
+                .join("\n");
         }
         if (isTalking(j)) {
             console.log("talking");
@@ -779,6 +864,16 @@ export default function DraftPage() {
                         return (
                             <section key={t}>
                             <h2 className="text-lg font-bold mb-2">{title}</h2>
+                            {r?.raw && (
+                            <details className="mt-2">
+                                <summary className="cursor-pointer text-sm text-neutral-600 hover:underline">
+                                Show raw model output
+                                </summary>
+                                <pre className="mt-2 whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-xs font-mono text-slate-800">
+                                {r.raw}
+                                </pre>
+                            </details>
+                            )}
                             <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
                                 {formatResult(t, r)}
                             </pre>
