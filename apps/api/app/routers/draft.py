@@ -78,6 +78,7 @@ def load_task_template(task: str) -> str:
 
     p_v2 = p / "_v2.md"
     if p_v2.exists():
+        print('found v2. using v2 mode')
         return p_v2.read_text(encoding="utf-8")
     if p.exists():
         return p.read_text(encoding="utf-8")
