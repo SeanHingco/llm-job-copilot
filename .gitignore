@@ -24,3 +24,4 @@ Thumbs.db
 # Coverage/testing
 coverage/
 .pytest_cache/
+/ml/tests/*
