@@ -864,6 +864,16 @@ export default function DraftPage() {
                         return (
                             <section key={t}>
                             <h2 className="text-lg font-bold mb-2">{title}</h2>
+                            {r?.raw && (
+                            <details className="mt-2">
+                                <summary className="cursor-pointer text-sm text-neutral-600 hover:underline">
+                                Show raw model output
+                                </summary>
+                                <pre className="mt-2 whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-xs font-mono text-slate-800">
+                                {r.raw}
+                                </pre>
+                            </details>
+                            )}
                             <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
                                 {formatResult(t, r)}
                             </pre>
