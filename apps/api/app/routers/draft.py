@@ -120,6 +120,7 @@ def load_task_template(task: str) -> str:
         print('found v2. using v2 mode')
         return p_v2.read_text(encoding="utf-8")
     if p.exists():
+        print("no v2 found, using v2 fallback")
         return p.read_text(encoding="utf-8")
     # fallback
     if task == "bullets":
