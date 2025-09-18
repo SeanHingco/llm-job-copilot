@@ -76,7 +76,7 @@ async def _run_generation(req: DraftReq) -> dict:
 def load_task_template(task: str) -> str:
     p = PROMPT_DIR / f"{task}.md"
 
-    p_v2 = p / "_v2.md"
+    p_v2 = PROMPT_DIR / f"{task}_v2.md"
     if p_v2.exists():
         print('found v2. using v2 mode')
         return p_v2.read_text(encoding="utf-8")
