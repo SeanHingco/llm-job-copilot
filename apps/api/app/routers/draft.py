@@ -117,10 +117,10 @@ def load_task_template(task: str) -> str:
 
     p_v2 = PROMPT_DIR / f"{task}_v2.md"
     if p_v2.exists():
-        print('found v2. using v2 mode')
+        print(f'found v2. using v2 mode for {task}')
         return p_v2.read_text(encoding="utf-8")
     if p.exists():
-        print("no v2 found, using v2 fallback")
+        print(f"no v2 found, using v1 fallback for {task}")
         return p.read_text(encoding="utf-8")
     # fallback
     if task == "bullets":
