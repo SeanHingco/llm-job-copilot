@@ -39,7 +39,7 @@ type AlignJSON = {
   questions_for_candidate?: string[];
 };
 
-type AnyJSON = BulletsJSON | TalkingJSON | CoverJSON | AlignJSON;
+type AnyJSON = BulletsJSON | TalkingJSON | TalkingPlaybookJSON | CoverJSON | AlignJSON;
 
 type TaskPhase = "queued" | "running" | "done" | "error";
 type TaskStatus = { phase: TaskPhase; message?: string };
@@ -63,6 +63,22 @@ type ExtractResponse = {
   text?: string;
   text_length?: number;
   probably_scanned?: boolean;
+};
+
+type TalkingPlaybookJSON = {
+  strengths: { requirement: string; evidence?: string; rationale?: string }[];
+  gaps: { requirement: string; rationale: string; mitigation: string }[];
+  interview_questions: {
+    question: string;
+    expected_focus?: string;
+    answer_tips?: string[];
+    prep_example?: string;
+  }[];
+  summary?: {
+    overall_strengths?: string[];
+    overall_gaps?: string[];
+    prep_focus?: string[];
+  };
 };
 
 export type PriceKey = 'pack_100' | 'pack_500' | 'sub_starter' | 'sub_plus' | 'sub_pro';
@@ -167,6 +183,27 @@ function isV2BulletItem(v: unknown): v is { text: string; job_chunks?: number[] 
   if (typeof text !== "string") return false;
   if (job_chunks !== undefined && !isNumberArray(job_chunks)) return false;
   return true;
+}
+function isTalkingPlaybook(j: unknown): j is TalkingPlaybookJSON {
+  if (!isObject(j)) return false;
+
+  const strengths = j["strengths"];
+  const gaps = j["gaps"];
+  const qs = j["interview_questions"];
+
+  const okStrengths = Array.isArray(strengths) && strengths.every(s =>
+    isObject(s) && typeof s["requirement"] === "string"
+  );
+  const okGaps = Array.isArray(gaps) && gaps.every(g =>
+    isObject(g) && typeof g["requirement"] === "string" &&
+    typeof g["rationale"] === "string" &&
+    typeof g["mitigation"] === "string"
+  );
+  const okQs = Array.isArray(qs) && qs.every(q =>
+    isObject(q) && typeof q["question"] === "string"
+  );
+
+  return okStrengths && okGaps && okQs;
 }
 
 type TalkingType = "strength" | "emphasis" | "reminder";
@@ -562,6 +599,54 @@ export default function DraftPage() {
                 .map((b) => `• ${b.text}${b.job_chunks?.length ? ` [${b.job_chunks.join(",")}]` : ""}`)
                 .join("\n");
         }
+        if (isTalkingPlaybook(j)) {
+            const lines: string[] = [];
+
+            lines.push("Strengths:");
+            for (const s of j.strengths) {
+                const parts = [
+                `• ${s.requirement}`,
+                s.evidence ? `  evidence: ${s.evidence}` : "",
+                s.rationale ? `  why: ${s.rationale}` : "",
+                ].filter(Boolean);
+                lines.push(parts.join("\n"));
+            }
+
+            lines.push("", "Gaps:");
+            for (const g of j.gaps) {
+                lines.push(`• ${g.requirement}\n  why: ${g.rationale}\n  mitigation: ${g.mitigation}`);
+            }
+
+            lines.push("", "Interview questions:");
+            for (const q of j.interview_questions) {
+                lines.push(
+                    `• ${q.question}` +
+                    (q.expected_focus ? `\n  focus: ${q.expected_focus}` : "") +
+                    (q.answer_tips && q.answer_tips.length ? `\n  tips: ${q.answer_tips.join(" | ")}` : "") +
+                    (q.prep_example ? `\n  prep: ${q.prep_example}` : "")
+                );
+            }
+
+            if (j.summary) {
+                const s = j.summary;
+                lines.push("");
+                lines.push("Summary:");
+                if (isStringArray(s.overall_strengths) && s.overall_strengths.length) {
+                    lines.push("  overall_strengths:");
+                    s.overall_strengths.forEach((x) => lines.push(`    - ${x}`));
+                }
+                if (isStringArray(s.overall_gaps) && s.overall_gaps.length) {
+                    lines.push("  overall_gaps:");
+                    s.overall_gaps.forEach((x) => lines.push(`    - ${x}`));
+                }
+                if (isStringArray(s.prep_focus) && s.prep_focus.length) {
+                    lines.push("  prep_focus:");
+                    s.prep_focus.forEach((x) => lines.push(`    - ${x}`));
+                }
+            }
+
+                return lines.join("\n");
+            }
         if (isTalking(j)) {
             console.log("talking");
             const pts = j.points.map(p => `• (${p.type ?? "point"}) ${p.text}`);
@@ -595,6 +680,11 @@ export default function DraftPage() {
 
     function normalizeAnyJSON(obj: unknown): AnyJSON | null {
         if (!isObject(obj)) return null;
+
+        if (isTalkingPlaybook(obj)) {
+            // Return as-is; renderer will handle it
+            return obj;
+        }
 
         // --- v2 detection: root has `items` array
         if (hasKey(obj, "items") && Array.isArray(obj.items)) {
