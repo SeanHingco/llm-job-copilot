@@ -37,6 +37,7 @@ class UserSummary(BaseModel):
     email: str
     plan: str
     free_uses_remaining: int
+    unlimited: bool  
     created_at: float
 
 
@@ -212,7 +213,18 @@ async def draft_run_form(
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
 ):
-    _ = await ensure_daily_free_topup(user["user_id"])
+    profile = await get_user_summary(user["user_id"])
+    is_unlimited = bool(profile.get("unlimited"))
+    credits_before = int(profile.get("free_uses_remaining") or 0)
+
+
+
+    
+    if not is_unlimited:
+        credits_after = await ensure_daily_free_topup(user["user_id"])
+        credits = credits_after
+    else:
+        credits = credits_before
     ok, retry = throttle(f"user:{user['user_id']}:run_form", limit=RL_RUN_FORM_PER_MIN, window_sec=60)
     if not ok:
         raise HTTPException(
@@ -227,8 +239,9 @@ async def draft_run_form(
 
     profile: UserSummary = await get_user_summary(user["user_id"])
     credits = int(profile["free_uses_remaining"])
+    is_unlimited = bool(profile["unlimited"])
 
-    if credits <= 0:
+    if credits <= 0 and not is_unlimited:
         raise HTTPException(status_code=402, detail={
             "code": "INSUFFICIENT_CREDITS",
             "message": "You are out of credits.",
@@ -258,6 +271,11 @@ async def draft_run_form(
 
     data = await _run_generation(req)
     
+    if is_unlimited:
+        data["meta"]["remaining_credits"] = profile["free_uses_remaining"]
+        data["meta"]["unlimited"] = True
+        return data
+
     remaining = await consume_free_use(user["user_id"])
     if remaining < 0:
         # race: someone else spent the last credit in parallel
