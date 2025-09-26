@@ -8,6 +8,15 @@ import { supabase } from '@/lib/supabaseClient';
 // import ChangePasswordForm from "components/ChangePasswordForm";
 // import Link from 'next/link'
 import { ApiResponse } from "@/lib/api";
+import TutorialModal from "components/TutorialModal";
+import Tooltip from "components/Tooltip";
+import BulletsView from "components/BulletsView";
+import PercentRing from "components/PercentRing";
+import TalkingPlaybookView from "components/TalkingPlaybookView";
+import AlignmentView from "components/AlignmentView";
+import CoverLetterView from "components/CoverLetterView";
+
+
 
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
@@ -104,7 +113,11 @@ type ApiError = {
 
 export type RunFormPayload = RunFormOk | ApiError;
 
-export type AccountCreditsResponse = { remaining_credits: number };
+export type AccountCreditsResponse = {
+  remaining_credits: number;
+  plan: 'free' | 'unlimited' | string;
+  unlimited: boolean;
+};
 export type SpendResponse = { ok: true; free_uses_remaining: number };
 export type CheckoutResponse = { url: string };
 export type CheckoutStatusResponse = {
@@ -123,6 +136,25 @@ const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "cover_letter",    label: "Cover Letter" },
   { key: "alignment",       label: "Alignment" },
 ];
+
+const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
+  bullets: {
+    info: "Six impact-focused bullets with evidence, keywords, and ATS hints.",
+    cost: 1,
+  },
+  talking_points: {
+    info: "Strengths, gaps with mitigation, and likely interview questions.",
+    cost: 1,
+  },
+  cover_letter: {
+    info: "Concise, tailored cover letter draft.",
+    cost: 1,
+  },
+  alignment: {
+    info: "Where your resume lines up with the JD and where it doesn’t.",
+    cost: 1,
+  },
+};
 
 function errorToMessage(status: number, body: ErrorBody): string {
   const detailText = asText(body?.detail ?? body?.message ?? body?.error ?? "");
@@ -184,27 +216,98 @@ function isV2BulletItem(v: unknown): v is { text: string; job_chunks?: number[] 
   if (job_chunks !== undefined && !isNumberArray(job_chunks)) return false;
   return true;
 }
+
+function looksBulletsV2(j: unknown): boolean {
+  if (!isBullets(j)) return false;
+  const arr = (j as BulletsJSON).bullets as unknown[];
+  // “rich” if any bullet has extra v2 fields
+  const rich = arr.some(
+    (b) => isObject(b) && ("evidence" in b || "keywords" in b || "rationale" in b || "transferable" in b)
+  );
+  return (arr.some(isV2Bullet) && rich) || hasAtsSummary(j);
+}
+
+function getAtsCoveragePercent(j: unknown): number | null {
+  if (!isObject(j)) return null;
+
+  const a =
+    (j as Record<string, unknown>)["ats_summary"] ??
+    (j as Record<string, unknown>)["atsSummary"];
+  if (!isObject(a)) return null;
+
+  const d =
+    (a as Record<string, unknown>)["coverage_detail"] ??
+    (a as Record<string, unknown>)["coverageDetail"];
+  if (!isObject(d)) return null;
+
+  let rateRaw =
+    (d as Record<string, unknown>)["coverage_rate"] ??
+    (d as Record<string, unknown>)["coverageRate"];
+
+  if (typeof rateRaw === "string") {
+    const n = Number(rateRaw);
+    if (!Number.isFinite(n)) return null;
+    rateRaw = n;
+  }
+  if (typeof rateRaw !== "number") return null;
+
+  const pct = rateRaw > 1 ? rateRaw : rateRaw * 100; // accept 0..1 or 0..100
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
+
+
 function isTalkingPlaybook(j: unknown): j is TalkingPlaybookJSON {
   if (!isObject(j)) return false;
 
-  const strengths = j["strengths"];
-  const gaps = j["gaps"];
-  const qs = j["interview_questions"];
+  const strengths = (j as Record<string, unknown>)["strengths"];
+  const gaps = (j as Record<string, unknown>)["gaps"];
+  const qs =
+    (j as Record<string, unknown>)["interview_questions"] ??
+    (j as Record<string, unknown>)["interviewQuestions"];
 
-  const okStrengths = Array.isArray(strengths) && strengths.every(s =>
-    isObject(s) && typeof s["requirement"] === "string"
-  );
-  const okGaps = Array.isArray(gaps) && gaps.every(g =>
-    isObject(g) && typeof g["requirement"] === "string" &&
-    typeof g["rationale"] === "string" &&
-    typeof g["mitigation"] === "string"
-  );
-  const okQs = Array.isArray(qs) && qs.every(q =>
-    isObject(q) && typeof q["question"] === "string"
-  );
+  const okStrengths =
+    Array.isArray(strengths) &&
+    strengths.every((s) =>
+      isObject(s) && typeof (s as Record<string, unknown>)["requirement"] === "string"
+    );
+
+  const okGaps =
+    Array.isArray(gaps) &&
+    gaps.every((g) =>
+      isObject(g) && typeof (g as Record<string, unknown>)["requirement"] === "string"
+    );
+
+  const okQs =
+    Array.isArray(qs) &&
+    qs.every((q) =>
+      isObject(q) && typeof (q as Record<string, unknown>)["question"] === "string"
+    );
 
   return okStrengths && okGaps && okQs;
 }
+
+function extractJsonFromMarkdownString(s: string): unknown | null {
+  // strip ```lang … ``` and grab the first {...} block
+  const fenceMatch = s.match(/```[\s\S]*?```/);
+  const inner = fenceMatch ? fenceMatch[0] : s;
+
+  // remove the ```lang\n prefix and closing ```
+  const withoutFences = inner
+    .replace(/^```[a-zA-Z]*\s*\n?/, "")
+    .replace(/```$/, "")
+    .trim();
+
+  // get tightest outer braces
+  const first = withoutFences.indexOf("{");
+  const last = withoutFences.lastIndexOf("}");
+  const candidate = first >= 0 && last > first
+    ? withoutFences.slice(first, last + 1)
+    : withoutFences;
+
+  try { return JSON.parse(candidate); } catch { return null; }
+}
+
 
 type TalkingType = "strength" | "emphasis" | "reminder";
 const TALKING_TYPES = new Set<TalkingType>(["strength", "emphasis", "reminder"]);
@@ -273,6 +376,86 @@ function hasAtsSummary(j: unknown): j is {
   return true;
 }
 
+function asStringArray(u: unknown): u is string[] {
+  return Array.isArray(u) && u.every((x) => typeof x === "string");
+}
+
+function normalizePlaybook(u: unknown): TalkingPlaybookJSON | null {
+  if (!isObject(u)) return null;
+
+  const strengthsU = (u as Record<string, unknown>)["strengths"];
+  const gapsU = (u as Record<string, unknown>)["gaps"];
+  const qsU =
+    (u as Record<string, unknown>)["interview_questions"] ??
+    (u as Record<string, unknown>)["interviewQuestions"];
+
+  if (!Array.isArray(strengthsU) || !Array.isArray(gapsU) || !Array.isArray(qsU)) {
+    return null;
+  }
+
+  const strengths = strengthsU
+    .filter(isObject)
+    .map((s) => {
+      const so = s as Record<string, unknown>;
+      const requirement = typeof so["requirement"] === "string" ? so["requirement"] : "";
+      const evidence = typeof so["evidence"] === "string" ? so["evidence"] : undefined;
+      const rationale = typeof so["rationale"] === "string" ? so["rationale"] : undefined;
+      return requirement ? { requirement, evidence, rationale } : null;
+    })
+    .filter(Boolean) as TalkingPlaybookJSON["strengths"];
+
+  const gaps = gapsU
+    .filter(isObject)
+    .map((g) => {
+      const go = g as Record<string, unknown>;
+      const requirement = typeof go["requirement"] === "string" ? go["requirement"] : "";
+      const rationale = typeof go["rationale"] === "string" ? go["rationale"] : "";
+      const mitigation = typeof go["mitigation"] === "string" ? go["mitigation"] : "";
+      return requirement ? { requirement, rationale, mitigation } : null;
+    })
+    .filter(Boolean) as TalkingPlaybookJSON["gaps"];
+
+  const interview_questions = qsU
+    .filter(isObject)
+    .map((q) => {
+      const qo = q as Record<string, unknown>;
+      const question = typeof qo["question"] === "string" ? qo["question"] : "";
+      const expected_focus =
+        typeof qo["expected_focus"] === "string" ? qo["expected_focus"] : undefined;
+      const answer_tips = asStringArray(qo["answer_tips"]) ? qo["answer_tips"] : undefined;
+      const prep_example =
+        typeof qo["prep_example"] === "string" ? qo["prep_example"] : undefined;
+      return question ? { question, expected_focus, answer_tips, prep_example } : null;
+    })
+    .filter(Boolean) as TalkingPlaybookJSON["interview_questions"];
+
+  let summary: TalkingPlaybookJSON["summary"] | undefined;
+  const sU = (u as Record<string, unknown>)["summary"];
+  if (isObject(sU)) {
+    const so = sU as Record<string, unknown>;
+    const overall_strengths =
+      asStringArray(so["overall_strengths"]) ? so["overall_strengths"]
+      : asStringArray(so["overallStrengths"]) ? so["overallStrengths"]
+      : undefined;
+    const overall_gaps =
+      asStringArray(so["overall_gaps"]) ? so["overall_gaps"]
+      : asStringArray(so["overallGaps"]) ? so["overallGaps"]
+      : undefined;
+    const prep_focus =
+      asStringArray(so["prep_focus"]) ? so["prep_focus"]
+      : asStringArray(so["prepFocus"]) ? so["prepFocus"]
+      : undefined;
+
+    summary = { overall_strengths, overall_gaps, prep_focus };
+  }
+
+  // minimal threshold so we don't render an empty card
+  if (strengths.length || gaps.length || interview_questions.length) {
+    return { strengths, gaps, interview_questions, summary };
+  }
+  return null;
+}
+
 function isAlign(j: unknown): j is AlignJSON {
   return (
     isObject(j) &&
@@ -321,12 +504,22 @@ export default function DraftPage() {
     const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
     const [credits, setCredits] = useState<number | undefined>(undefined);
     const [jobText, setJobText] = useState<string>("");
+    const [showTut, setShowTut] = useState(false);
+    const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
             console.log('[draft] session?', !!data.session, data.session?.user?.email)
         })
     }, [])
+
+    useEffect(() => {
+        try {
+            const rawU = localStorage.getItem('rb:is_unlimited');
+            if (rawU != null) setIsUnlimited(rawU === 'true');
+            console.log(`ayo unlimited is set to ${isUnlimited}`)
+        } catch {}
+    }, []);
 
     useEffect(() => {
         try {
@@ -341,11 +534,22 @@ export default function DraftPage() {
 
     useEffect(() => {
         (async () => {
-            const res = await apiFetch<{ remaining_credits?: number }>('/account/credits')
-            const n = res.data?.remaining_credits
-            if (res.ok && typeof n === 'number') setCreditsCached(n)
-        })()
-    }, [])
+            const res = await apiFetch<AccountCreditsResponse>('/account/credits');
+            if (res.ok) {
+            const d = res.data!;
+            setCreditsCached(d.remaining_credits);
+            setIsUnlimited(Boolean(d.unlimited));
+            try { localStorage.setItem('rb:is_unlimited', String(Boolean(d.unlimited))); } catch {}
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        try {
+            const seen = localStorage.getItem("rb:tutorial_seen");
+            if (!seen) setShowTut(true);
+        } catch {}
+    }, []);
 
 
     // check auth
@@ -462,7 +666,7 @@ export default function DraftPage() {
         }
         if (selectedTasks.length === 0) { setGenError("Select at least one task."); return; }
 
-        if (typeof credits === 'number' && credits <= 0) {
+        if (!isUnlimited && typeof credits === 'number' && credits <= 0) {
             const msg = "You’re out of credits. Upgrade to continue.";
             setUpgradeMsg(msg);
             setGenError(msg);
@@ -492,6 +696,10 @@ export default function DraftPage() {
                 hasCreditsMeta(out) && typeof out.meta?.remaining_credits === 'number'
                     ? out.meta.remaining_credits
                     : undefined;
+            if (hasCreditsMeta(out) && typeof out.meta?.unlimited === 'boolean') {
+                setIsUnlimited(out.meta.unlimited);
+                try { localStorage.setItem('rb:is_unlimited', String(out.meta.unlimited)); } catch {}
+            }
             if (typeof nextCredits === 'number') setCredits(nextCredits);
             if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
@@ -515,29 +723,23 @@ export default function DraftPage() {
             let parsed: AnyJSON | null = null;
             let raw = "";
             if (isRunFormOk(out)) {
-                    const parsedFromKnown = out.output_json ?? null;
-                    parsed = parsedFromKnown;
+                const fromKnown = out.output_json ?? null;
+                parsed = fromKnown;
 
-                    if (!parsed) parsed = parseJSON(out.output);
-                    if (!parsed) parsed = parseJSON(out.bullets ?? null);
+                if (!parsed) parsed = parseJSON(out.output);
+                if (!parsed) parsed = parseJSON(out.bullets ?? null);
 
-                    if (!parsed && typeof out.bullets === "string") {
-                        const txt = out.bullets.trim();
-                        if (!(txt.startsWith("{") || txt.startsWith("```"))) {
-                        const lines = out.bullets
-                            .split(/\r?\n/)
-                            .map(line => line.replace(/^[\-\u2022•]\s*/, "").trim())
-                            .filter(line => line.length > 0);
-                        parsed = { bullets: lines.map(t => ({ text: t })) } as BulletsJSON;
-                        }
-                    }
+                // NEW: last-ditch parse if model stuffed JSON in a string with fences
+                if (!parsed && typeof out.bullets === "string") {
+                    const extracted = extractJsonFromMarkdownString(out.bullets);
+                    const normalized = normalizeAnyJSON(extracted);
+                    if (normalized) parsed = normalized;
+                }
 
-                    if (typeof out.output === "string") raw = out.output;
-                    else try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
-                    } else {
-                    // If we somehow got a non-ok shape on a 2xx, stringify it for visibility
-                    try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
-                    }
+                raw = typeof out.output === "string" ? out.output : (() => { try { return JSON.stringify(out, null, 2); } catch { return "(no output)"; } })();
+            } else {
+                try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
+            }
 
                     setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
                     setPhase(taskToRun, "done");
@@ -788,15 +990,16 @@ export default function DraftPage() {
     }
 
 
-    const outOfCredits = typeof credits === 'number' && credits <= 0;
-    const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && !outOfCredits;
+    const outOfCredits = !isUnlimited && typeof credits === 'number' && credits <= 0;
+    const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && (!outOfCredits || isUnlimited);
 
     return (
         <main className="p-8 space-y-4">
+            <TutorialModal open={showTut} onClose={() => setShowTut(false)} />
             <div className="max-w-3xl mx-auto px-4">
                 <div className="mb-3 flex items-center justify-between">
                     <h1 className="text-2xl font-bold">Resume Bender</h1>
-                    <CreditBadge value={credits} loading={isGenerating} />
+                    <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
                     {/* <SignOutButton />
                     <Link
                         href="/account/password"
@@ -848,6 +1051,7 @@ export default function DraftPage() {
                         <div className="grid grid-cols-2 gap-2 mb-2">
                             {TASK_OPTIONS.map(opt => {
                                 const st = taskStatus[opt.key]?.phase;
+                                const details = TASK_DETAILS[opt.key]; 
                                 return (
                                     <label key={opt.key} className="inline-flex items-center gap-2 text-sm text-neutral-800">
                                         <input
@@ -857,6 +1061,28 @@ export default function DraftPage() {
                                             onChange={() => toggleTask(opt.key)}
                                         />
                                         <span>{opt.label}</span>
+
+                                        {/* cost badge */}
+                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                            {details.cost} credits
+                                        </span>
+
+                                        <Tooltip content={
+                                            <span>
+                                                {details.info}
+                                                <br />
+                                                <span className="text-neutral-500">Est. cost: {details.cost} credits</span>
+                                            </span>
+                                        }>
+                                            <button
+                                                type="button"
+                                                aria-label={`${opt.label} info`}
+                                                className="h-5 w-5 inline-flex items-center justify-center rounded-full border text-[10px] text-neutral-700 hover:bg-neutral-100"
+                                                tabIndex={0}
+                                            >
+                                            i
+                                            </button>
+                                        </Tooltip>
 
                                         {st === "running" && (
                                             <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" aria-label="Generating" />
@@ -911,7 +1137,8 @@ export default function DraftPage() {
                             onClick={onGenerateAll}
                             className="inline-flex justify-center items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={!canSubmit}>
-                            {outOfCredits ? "Out of credits" : (isGenerating ? "Generating…" : "Get Resume Insights")}
+                                {isUnlimited ? (isGenerating ? "Generating…" : "Get Resume Insights")
+                                    : (outOfCredits ? "Out of credits" : (isGenerating ? "Generating…" : "Get Resume Insights"))}
                         </button>
                     </form>
                 </div>
@@ -922,7 +1149,7 @@ export default function DraftPage() {
                     </div>
                 )}
                 {status && <p>{status}</p>}
-                {typeof credits === 'number' && credits <= 0 && !upgradeMsg && (
+                {!isUnlimited && typeof credits === 'number' && credits <= 0 && !upgradeMsg && (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                         You’re out of credits. <a className="underline" href="/account/billing">Upgrade</a> to continue.
                     </div>
@@ -964,9 +1191,95 @@ export default function DraftPage() {
                                 </pre>
                             </details>
                             )}
-                            <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
-                                {formatResult(t, r)}
-                            </pre>
+                            {t === "bullets" ? (
+                                (() => {
+                                    const j = r?.json;
+                                    const isV2 = !!j && looksBulletsV2(j);
+                                    return (
+                                    <div className="space-y-3">
+                                        {isV2 ? (
+                                        <>
+                                            <BulletsView data={j} />
+                                            {/* Optional: keep ATS summary visible under the cards */}
+                                            {hasAtsSummary(j) && (
+                                            <div className="rounded-xl border bg-white p-4 shadow-sm">
+                                                <div className="flex items-start gap-4">
+                                                {/* Ring (always try; render only if we have a number) */}
+                                                {(() => {
+                                                    const pct = getAtsCoveragePercent(j);
+                                                    // optional debug:
+                                                    // console.log("[draft] ATS coverage pct:", pct);
+                                                    return pct !== null ? <PercentRing value={pct} label="ATS coverage" /> : null;
+                                                })()}
+
+                                                <div className="flex-1">
+                                                    <h3 className="mb-1 text-sm font-semibold text-neutral-900">ATS summary</h3>
+                                                    <div className="text-sm text-neutral-700 space-y-1">
+                                                    {j.ats_summary.covered_keywords?.length ? (
+                                                        <div>
+                                                        <span className="font-medium">Covered:</span>{" "}
+                                                        {j.ats_summary.covered_keywords.join(", ")}
+                                                        </div>
+                                                    ) : null}
+                                                    {j.ats_summary.missing_keywords?.length ? (
+                                                        <div>
+                                                        <span className="font-medium">Missing:</span>{" "}
+                                                        {j.ats_summary.missing_keywords.join(", ")}
+                                                        </div>
+                                                    ) : null}
+                                                    </div>
+                                                </div>
+                                                </div>
+                                            </div>
+                                            )}
+                                        </>
+                                        ) : (
+                                        <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                            {formatResult(t, r)}
+                                        </pre>
+                                        )}
+                                    </div>
+                                    );
+                                })()
+                                ) : t === "talking_points" ? (
+                                    (() => {
+                                        // Normalize whatever came back (raw JSON object or fenced JSON string you parsed)
+                                        const playbook = normalizePlaybook(r?.json);
+                                        return playbook ? (
+                                        <TalkingPlaybookView data={playbook} />
+                                        ) : (
+                                        <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                            {formatResult(t, r)}
+                                        </pre>
+                                        );
+                                })()
+                                ) : t === "alignment" ? (
+                                    (() => {
+                                        const j = r?.json;
+                                        return j && isAlign(j)
+                                        ? <AlignmentView data={j} />
+                                        : (
+                                            <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                            {formatResult(t, r)}
+                                            </pre>
+                                        );
+                                    })()
+                                ) : t === "cover_letter" ? (
+                                    (() => {
+                                        const j = r?.json;
+                                        return j && isCover(j) ? (
+                                        <CoverLetterView data={j} />
+                                        ) : (
+                                        <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                            {formatResult(t, r)}
+                                        </pre>
+                                        );
+                                    })()
+                                ) : (
+                                <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                    {formatResult(t, r)}
+                                </pre>
+                                )}
                             </section>
                         );
                         })}

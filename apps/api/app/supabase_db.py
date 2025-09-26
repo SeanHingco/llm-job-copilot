@@ -3,6 +3,7 @@ import os, httpx
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -26,7 +27,7 @@ async def upsert_user(user_id: str, email: str) -> None:
             raise RuntimeError(f"users upsert failed: {r.status_code} {r.text}")
 
 async def get_user_summary(user_id: str) -> dict:
-    params = {"id": f"eq.{user_id}", "select": "id,email,plan,free_uses_remaining,created_at"}
+    params = {"id": f"eq.{user_id}", "select": "id,email,plan,free_uses_remaining,unlimited,created_at"}
     headers = {**HEADERS, "Accept": "application/vnd.pgrst.object+json"}
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.get(f"{REST}/users", params=params, headers=headers)
@@ -52,14 +53,35 @@ async def consume_free_use(user_id: str) -> int:
     # null or unexpected → treat as “no decrement”
     return -1
 
-async def set_plan_and_grant(user_id: str, plan: str, allowance: int) -> dict:
-    payload = {"plan": plan, "free_uses_remaining": allowance}
+async def set_plan_and_grant(
+    user_id: str,
+    plan: str,
+    allowance: int,
+    *,
+    unlimited: bool = False,
+    overwrite_credits: bool = True,
+) -> dict:
+    """
+    Update the user's plan/unlimited flag and (optionally) overwrite credits.
+
+    - If overwrite_credits is False, we leave free_uses_remaining untouched.
+    - For unlimited plans, you’ll typically call with overwrite_credits=False.
+    """
+    payload: Dict[str, Any] = {
+        "plan": plan,
+        "unlimited": bool(unlimited),
+    }
+    if overwrite_credits:
+        payload["free_uses_remaining"] = int(allowance)
+
     params  = {"id": f"eq.{user_id}"}
     headers = {**HEADERS, "Prefer": "return=representation"}
+
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.patch(f"{REST}/users", params=params, headers=headers, json=payload)
         r.raise_for_status()
-        return r.json()[0] if isinstance(r.json(), list) else r.json()
+        body = r.json()
+        return body[0] if isinstance(body, list) else body
     
 async def upsert_customer(user_id: str, stripe_customer_id: str) -> None:
     """

@@ -24,8 +24,8 @@ export default function AppHeader() {
         <div className="flex items-center gap-2">
           {link('/draft', 'Application Insights', pathname)}
           {link('/account', 'Account', pathname)}
-          {link('/legal/privacy', 'Privacy', pathname)}
-          {link('/legal/terms', 'Terms', pathname)}
+          {/* {link('/legal/privacy', 'Privacy', pathname)}
+          {link('/legal/terms', 'Terms', pathname)} */}
           {/* {link('/account/billing', 'Billing', pathname)}
           {link('/account/password', 'Password', pathname)} */}
         </div>

@@ -4,11 +4,15 @@ import { apiFetch } from '@/lib/api';
 import { useRequireAuth } from '@/lib/RequireAuth';
 import Link from 'next/link';
 
+type PackKey = 'pack_20' | 'pack_60' | 'pack_200';
+type SubKey  = 'sub_unlimited_monthly' | 'sub_unlimited_quarterly' | 'sub_unlimited_yearly';
+
 type Me = {
-    email?: string;
-    plan?: string;
-    free_uses_remaining?: number;
-}
+  email?: string;
+  plan?: string;
+  free_uses_remaining?: number;
+  unlimited?: boolean;
+};
 
 type SubSummary = {
     has_subscription: boolean;
@@ -24,9 +28,9 @@ type PackCardProps = {
   title: string;
   priceText: string;
   bullets: string[];
-  priceKey: "pack_100" | "pack_500";
-  onBuy: (key: "pack_100" | "pack_500") => Promise<void> | void;
-  buyingKey: null | "pack_100" | "pack_500";
+  priceKey: PackKey;
+  onBuy: (key: PackKey) => Promise<void> | void;
+  buyingKey: null | PackKey;
   disabled?: boolean;
   note?: string; 
 };
@@ -35,29 +39,31 @@ type SubCardProps = {
   title: string;
   priceText: string;
   bullets: string[];
-  priceKey: 'sub_starter'|'sub_plus'|'sub_pro';
+  priceKey: SubKey;
   isCurrent?: boolean;
-  onChoose: (key: 'sub_starter'|'sub_plus'|'sub_pro') => Promise<void> | void;
+  onChoose: (key: SubKey) => Promise<void> | void;
   onManage: () => Promise<void> | void;
   busy?: boolean;
   ribbon?: string;
 };
 
 // prices
-const PACK_PRICE_CENTS: Record<"pack_100" | "pack_500", number> = {
-  pack_100: 900,
-  pack_500: 3500,
+const PACK_PRICE_CENTS: Record<PackKey, number> = {
+  pack_20: 1400,
+  pack_60: 3600,
+  pack_200: 11100,
 };
 
-const SUB_PRICE_CENTS: Record<'sub_starter'|'sub_plus'|'sub_pro', number> = {
-  sub_starter: 900,
-  sub_plus: 1800,
-  sub_pro: 6000,
+const SUB_PRICE_CENTS: Record<SubKey, number> = {
+  sub_unlimited_monthly: 1900,
+  sub_unlimited_quarterly: 4900,
+  sub_unlimited_yearly: 14900,
 };
 
-const PACK_CREDITS: Record<"pack_100" | "pack_500", number> = {
-  pack_100: 100,
-  pack_500: 500,
+const PACK_CREDITS: Record<PackKey, number> = {
+  pack_20: 20,
+  pack_60: 60,
+  pack_200: 200
 };
 
 function usdPerDollar(n: number) {
@@ -142,7 +148,7 @@ function SubCard({
 
       <div className="flex items-baseline justify-between">
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-        <div className="text-lg font-bold text-slate-800">{priceText}/mo</div>
+        <div className="text-lg font-bold text-slate-800">{priceText}</div>
       </div>
 
       {isCurrent && (
@@ -187,7 +193,7 @@ export default function Billing() {
     const [subscribing, setSubscribing] = useState<boolean>(false);
     const [managing, setManaging] = useState<boolean>(false);
     const [completing, setCompleting] = useState<boolean>(false);
-    const [buying, setBuying] = useState<null | "pack_100" | "pack_500">(null);
+    const [buying, setBuying] = useState<null | PackKey>(null);
     const [sub, setSub] = useState<SubSummary | null>(null);
 
     const plan = me?.plan ?? 'free';
@@ -202,11 +208,12 @@ export default function Billing() {
             : null;
 
     // price text
-    const perCredit100 = PACK_PRICE_CENTS.pack_100 / PACK_CREDITS.pack_100 / 100; // dollars/credit
-    const perCredit500 = PACK_PRICE_CENTS.pack_500 / PACK_CREDITS.pack_500 / 100;
+    const perCredit20 = PACK_PRICE_CENTS.pack_20 / PACK_CREDITS.pack_20 / 100; // dollars/credit
+    const perCredit60 = PACK_PRICE_CENTS.pack_60 / PACK_CREDITS.pack_60 / 100;
+    const perCredit200 = PACK_PRICE_CENTS.pack_200 / PACK_CREDITS.pack_200 / 100;
     const savingsPct500 = Math.max(
         0,
-        Math.round((1 - perCredit500 / perCredit100) * 100)
+        Math.round((1 - perCredit20 / perCredit60) * 100)
     );
 
 
@@ -325,7 +332,7 @@ export default function Billing() {
 
     if (!ready) return null;
 
-    async function subscribe(priceKey: 'sub_starter'|'sub_plus'|'sub_pro') {
+    async function subscribe(priceKey: SubKey) {
         if (subscribing || loading || completing) return;
         setError(null); setSubscribing(true);
         try {
@@ -345,11 +352,11 @@ export default function Billing() {
     }
 
 
-    async function buyCredits(priceKey: "pack_100" | "pack_500") {
+    async function buyCredits(priceKey: PackKey) {
         if (buying) return;
         setError(null);
         setBuying(priceKey);
-        try {
+        try { 
             const res = await apiFetch<{ url?: string }>("/billing/checkout", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
@@ -438,26 +445,18 @@ export default function Billing() {
                         <div className={statBase}>
                             <div className={labelBase}>Plan</div>
                             <div className="mt-1 flex items-center gap-2">
-                                <span
-                                className={[
-                                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                    isFree ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700',
-                                ].join(' ')}
-                                >
-                                {plan}
+                                <span className={[
+                                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                (me?.plan ?? 'free') === 'free' ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700',
+                                ].join(' ')}>
+                                {(me?.plan ?? 'free')}
                                 </span>
-
-                                {/* subtle status chips, only if there is a subscription */}
-                                {hasSub && subStatus && (
-                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                                    {subStatus}
+                                {Boolean(me?.unlimited) && (
+                                <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
+                                    Unlimited
                                 </span>
                                 )}
-                                {hasSub && cancelsAtPeriodEnd && (
-                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                                    Cancels at period end
-                                </span>
-                                )}
+                                {/* keep the subscription status chips as you have them */}
                             </div>
                         </div>
 
@@ -465,9 +464,10 @@ export default function Billing() {
                         <div className={statBase}>
                             <div className={labelBase}>Credits left</div>
                             <div className="mt-1 text-xl font-semibold tabular-nums text-violet-500">
-                            {me.free_uses_remaining ?? 0}
+                                {me?.unlimited ? '∞' : (me?.free_uses_remaining ?? 0)}
                             </div>
                         </div>
+
                         </>
                     )}
                 </div>
@@ -479,12 +479,10 @@ export default function Billing() {
                             <button className={subBase} onClick={() => subscribe('sub_pro')}>Subscribe: Unlimited</button>
                         </div>
                     )} */}
-                    {!loading && plan !== 'free' && (
-                        <div className=
-                            'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:opacity-50 disabled:cursor-not-allowed'
-                        >
-                            <button onClick={manageBilling} disabled={managing || completing} aria-busy={managing || completing}>
-                                {managing ? 'Opening…' : 'Manage billing'}
+                    {!loading && hasSub && (
+                        <div className="inline-flex ...">
+                            <button onClick={manageBilling} /* ... */>
+                            {managing ? 'Opening…' : 'Manage billing'}
                             </button>
                         </div>
                     )}
@@ -510,61 +508,69 @@ export default function Billing() {
                 </div>
             </div>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <SubCard
-                    title="Starter"
-                    priceText={usd(SUB_PRICE_CENTS.sub_starter)}
-                    bullets={["100 credits / month", "Email support", "Prorated on changes"]}
-                    priceKey="sub_starter"
-                    isCurrent={sub?.plan_key === 'sub_starter'}
-                    onChoose={subscribe}
-                    onManage={manageBilling}
-                    busy={subscribing || managing || completing}
-                />
-
-                <SubCard
-                    title="Plus"
-                    priceText={usd(SUB_PRICE_CENTS.sub_plus)}
-                    bullets={["250 credits / month", "Priority support", "Prorated on changes"]}
-                    priceKey="sub_plus"
-                    isCurrent={sub?.plan_key === "sub_plus"}
-                    onChoose={subscribe}
-                    onManage={manageBilling}
-                    ribbon="Most popular"
-                    busy={subscribing || managing || completing}
-                />
-
-                <SubCard
-                    title="Pro"
-                    priceText={usd(SUB_PRICE_CENTS.sub_pro)}
-                    bullets={["Unlimited credits", "Priority support", "Best for heavy use"]}
-                    priceKey="sub_pro"
-                    isCurrent={sub?.plan_key === "sub_pro"}
-                    onChoose={subscribe}
-                    onManage={manageBilling}
-                    busy={subscribing || managing || completing}
-                />
+                  <SubCard
+                        title="Monthly"
+                        priceText={`${usd(SUB_PRICE_CENTS.sub_unlimited_monthly)}/mo`}
+                        bullets={["Unlimited usage", "Fair-use rate limits", "Manage anytime"]}
+                        priceKey="sub_unlimited_monthly"
+                        isCurrent={sub?.plan_key === 'sub_unlimited_monthly'}
+                        onChoose={subscribe}
+                        onManage={manageBilling}
+                        busy={subscribing || managing || completing}
+                    />
+                    <SubCard
+                        title="Quarterly"
+                        priceText={`${usd(SUB_PRICE_CENTS.sub_unlimited_quarterly)}/3 mo`}
+                        bullets={["Unlimited usage", "Save vs monthly", "Manage anytime"]}
+                        priceKey="sub_unlimited_quarterly"
+                        isCurrent={sub?.plan_key === 'sub_unlimited_quarterly'}
+                        onChoose={subscribe}
+                        onManage={manageBilling}
+                        ribbon="Most popular"
+                        busy={subscribing || managing || completing}
+                    />
+                    <SubCard
+                        title="Yearly"
+                        priceText={`${usd(SUB_PRICE_CENTS.sub_unlimited_yearly)}/yr`}
+                        bullets={["Unlimited usage", "Best value", "Manage anytime"]}
+                        priceKey="sub_unlimited_yearly"
+                        isCurrent={sub?.plan_key === 'sub_unlimited_yearly'}
+                        onChoose={subscribe}
+                        onManage={manageBilling}
+                        busy={subscribing || managing || completing}
+                    />
             </div>
             {!loading && (
-                <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <PackCard
-                        title="100-Credit Pack"
-                        priceText={usd(PACK_PRICE_CENTS.pack_100)}
-                        note={`≈ ${usdPerDollar(perCredit100)}/credit`}
-                        bullets={["One-time purchase", "Never expires", "Great for light use"]}
-                        priceKey="pack_100"
-                        onBuy={buyCredits}
-                        buyingKey={buying}
-                        disabled={loading || completing}
+                    title="20-Credit Pack"
+                    priceText={usd(PACK_PRICE_CENTS.pack_20)}
+                    note={`≈ ${usd(PACK_PRICE_CENTS.pack_20 / PACK_CREDITS.pack_20)} / credit`}
+                    bullets={["One-time purchase", "Never expires", "Great for light use"]}
+                    priceKey="pack_20"
+                    onBuy={buyCredits}
+                    buyingKey={buying}
+                    disabled={loading || completing}
                     />
                     <PackCard
-                        title="500-Credit Pack"
-                        priceText={usd(PACK_PRICE_CENTS.pack_500)}
-                        note={`≈ ${usdPerDollar(perCredit500)}/credit${savingsPct500 ? ` • Save ${savingsPct500}%` : ""}`}
-                        bullets={["Bulk discount", "Never expires", "Best value for power users"]}
-                        priceKey="pack_500"
-                        onBuy={buyCredits}
-                        buyingKey={buying}
-                        disabled={loading || completing}
+                    title="60-Credit Pack"
+                    priceText={usd(PACK_PRICE_CENTS.pack_60)}
+                    note={`≈ ${usd(PACK_PRICE_CENTS.pack_60 / PACK_CREDITS.pack_60)} / credit`}
+                    bullets={["Bulk discount", "Never expires", "Popular choice"]}
+                    priceKey="pack_60"
+                    onBuy={buyCredits}
+                    buyingKey={buying}
+                    disabled={loading || completing}
+                    />
+                    <PackCard
+                    title="200-Credit Pack"
+                    priceText={usd(PACK_PRICE_CENTS.pack_200)}
+                    note={`≈ ${usd(PACK_PRICE_CENTS.pack_200 / PACK_CREDITS.pack_200)} / credit`}
+                    bullets={["Best value", "Never expires", "For power users"]}
+                    priceKey="pack_200"
+                    onBuy={buyCredits}
+                    buyingKey={buying}
+                    disabled={loading || completing}
                     />
                 </div>
             )}

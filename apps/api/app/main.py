@@ -159,32 +159,36 @@ async def bootstrap(user = Depends(verify_user)):
 @app.get("/account/credits")
 async def account_credits(user = Depends(verify_user)):
     uid = user["user_id"]
-    email = user.get("email")
 
-    summary = await get_user_summary(uid)
-    if not summary:
-        if email:
-            await upsert_user(uid, email)
-            summary = await get_user_summary(uid)
-        else:
-            summary = {}
+    snap = await get_user_summary(uid) or {}
+    unlimited = bool(snap.get("unlimited"))
+    plan = (snap.get("plan") or "free").lower()
 
-    remaining = await ensure_daily_free_topup(uid)
+    # Only do daily free top-up for non-unlimited Free users
+    if not unlimited and plan == "free":
+        await ensure_daily_free_topup(uid)
+        snap = await get_user_summary(uid) or {}  # refresh after possible update
 
-    # try:
-    #     remaining = int(remaining) if remaining is not None else 0
-    # except:
-    #     remaining = 0
-
-    return {"remaining_credits": remaining}
+    return {
+        "remaining_credits": int(snap.get("free_uses_remaining") or 0),
+        "plan": plan,
+        "unlimited": unlimited,
+    }
 
 @app.post("/spend")
 async def spend(user = Depends(verify_user)):
     snap = await get_user_summary(user["user_id"]) or {}
-    plan = (snap.get("plan") or "free").lower()
-    if plan in ("pro", "unlimited"):  # match your PRICE_CATALOG plan string
-        return {"ok": True, "free_uses_remaining": snap.get("free_uses_remaining") or 0}
 
+    # 1) Primary: honor DB boolean
+    if bool(snap.get("unlimited")):
+        return {"ok": True, "free_uses_remaining": int(snap.get("free_uses_remaining") or 0)}
+
+    # 2) Optional: still treat paid non-free plans as unlimited usage
+    plan = (snap.get("plan") or "free").lower()
+    if plan != "free":
+        return {"ok": True, "free_uses_remaining": int(snap.get("free_uses_remaining") or 0)}
+
+    # 3) Free plan: consume a credit
     remaining = await consume_free_use(user["user_id"])
     if remaining < 0:
         raise HTTPException(status_code=402, detail="Out of free uses")
@@ -414,9 +418,22 @@ async def stripe_webhook(request: Request):
 
         chosen = resolve_subscription_by_price_id(price_id)
         if chosen:
-            monthly = int(chosen.get("monthly_allowance") or 0)
-            await set_plan_and_grant(user_id, chosen["plan"], monthly)
-            print(f"reset credits for {user_id} → plan={chosen['plan']} allowance={monthly}")
+            if chosen.get("unlimited"):
+                # Preserve remaining credits, only flip plan/unlimited.
+                snap = await get_user_summary(user_id) or {}
+                remaining = int(snap.get("free_uses_remaining") or 0)
+
+                # If your set_plan_and_grant now accepts an `unlimited` boolean:
+                # await set_plan_and_grant(user_id, "unlimited", remaining, unlimited=True)
+
+                # If your set_plan_and_grant infers unlimited from plan:
+                await set_plan_and_grant(user_id, "unlimited", remaining)
+
+                print(f"set unlimited plan (credits preserved) → user={user_id} remaining={remaining}")
+            else:
+                monthly = int(chosen.get("monthly_allowance") or 0)
+                await set_plan_and_grant(user_id, chosen["plan"], monthly)
+                print(f"reset credits for {user_id} → plan={chosen['plan']} allowance={monthly}")
         else:
             # safe fallback
             monthly = int(PRICE_CATALOG["sub_starter"]["monthly_allowance"])
