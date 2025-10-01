@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { apiFetch } from '@/lib/api';
+import Link from 'next/link'
 
 export default function LoginClient() {
     const [email, setEmail] = useState('');
@@ -10,6 +12,7 @@ export default function LoginClient() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+    const [fullName, setFullName] = useState('');
 
     const router = useRouter();
     const params = useSearchParams();
@@ -37,12 +40,15 @@ export default function LoginClient() {
                 ? `${window.location.origin}/login`
                 : undefined
             const { data, error } = await supabase.auth.signUp({
-                email, password, options: { emailRedirectTo }
+                email, password, options: { 
+                    emailRedirectTo,
+                    data: { name: fullName }
+                }
             })
                 if (error) { setError(error.message); return }
                 if (data.session) {
-                    await waitForSession()
-                    router.replace(next)
+                    await waitForSession();
+                    router.replace(next);
                 } else {
                     setError('Check your email to confirm, then sign in.')
                 }
@@ -55,6 +61,7 @@ export default function LoginClient() {
             setLoading(false);
         }
     }
+
 
     async function waitForSession(timeoutMs = 4000) {
         const start = Date.now()
@@ -69,6 +76,22 @@ export default function LoginClient() {
     return (
         <main className="min-h-screen flex items-center justify-center">
             <form onSubmit={onSubmit} className="w-full max-w-sm grid gap-3">
+                {/* Header to make Sign In/Sign Up Obvi */}
+                <h1 className="mb-2 text-lg font-semibold">
+                    {mode === 'signin' ? 'Sign in' : 'Sign Up'}
+                </h1>
+
+                {mode === 'signup' && (                     // ← NEW: only show for signup
+                    <input
+                        type="text"
+                        placeholder="Full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="rounded border px-3 py-2"
+                        required
+                    />
+                )}
+
                 <input
                     type="email"
                     placeholder="you@example.com"
@@ -100,6 +123,9 @@ export default function LoginClient() {
                         </button>
                     )}
                 </div>
+                <Link href='/login/forgot-password' className="text-sm mt-2 text-indigo-500 hover:text-indigo-700">
+                    Forgot password
+                </Link>
             </form>
         </main>
     )

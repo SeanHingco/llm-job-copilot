@@ -17,8 +17,10 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-async def upsert_user(user_id: str, email: str) -> None:
-    payload = {"id": user_id, "email": email}
+async def upsert_user(user_id: str, email: str|None=None, name: str|None=None) -> None:
+    payload = {"id": user_id}
+    if email and email.strip(): payload["email"] = email.strip()
+    if name and email.strip():  payload["full_name"] = name.strip()
     params  = {"on_conflict": "id"}
     headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
     async with httpx.AsyncClient(timeout=5) as client:
@@ -27,7 +29,7 @@ async def upsert_user(user_id: str, email: str) -> None:
             raise RuntimeError(f"users upsert failed: {r.status_code} {r.text}")
 
 async def get_user_summary(user_id: str) -> dict:
-    params = {"id": f"eq.{user_id}", "select": "id,email,plan,free_uses_remaining,unlimited,created_at"}
+    params = {"id": f"eq.{user_id}", "select": "id,email,plan,free_uses_remaining,unlimited,full_name,created_at"}
     headers = {**HEADERS, "Accept": "application/vnd.pgrst.object+json"}
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.get(f"{REST}/users", params=params, headers=headers)
@@ -142,3 +144,40 @@ async def set_remaining_and_mark_refill(user_id: str, remaining: int) -> dict:
         r.raise_for_status()
         j = r.json()
         return j[0] if isinstance(j, list) else j
+
+async def ensure_user_identity(user_id: str, email: str | None = None, name: str | None = None) -> None:
+    """
+    Make sure a row exists in users(id, ...).
+    - If no row: insert with id (+ email/name if provided)
+    - If row exists: PATCH only email/name if they changed
+    Never touches plan/unlimited/credits.
+    """
+    snap = await get_user_summary(user_id) or {}
+
+    if not snap:
+        # create minimal row
+        payload = [{"id": user_id}]
+        if email is not None:
+            payload[0]["email"] = email
+        if name is not None:
+            payload[0]["name"] = name
+
+        headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(f"{REST}/users", headers=headers, json=payload)
+            r.raise_for_status()
+        return
+
+    # already exists → update identity fields only if changed
+    patch: Dict[str, Any] = {}
+    if email and email != snap.get("email"):
+        patch["email"] = email
+    if name and name != snap.get("name"):
+        patch["name"] = name
+
+    if patch:
+        params  = {"id": f"eq.{user_id}"}
+        headers = {**HEADERS, "Prefer": "return=representation"}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.patch(f"{REST}/users", params=params, headers=headers, json=patch)
+            r.raise_for_status()
