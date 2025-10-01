@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Resume Bender",
     description: "AI-powered resume & job prep copilot.",
-    url: "https://your-domain.com",   // update to your real domain
+    url: "https://resume-bender.seanhing.co",   // update to your real domain
     siteName: "Resume Bender",
     images: [
       {

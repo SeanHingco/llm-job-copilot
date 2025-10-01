@@ -24,8 +24,12 @@ export default function ForgotPasswordPage() {
             if (error) throw error;
 
             setNotice('If that email exists, we just sent a reset link.');
-        } catch (err: any) {
-            setError(err?.message || 'Could not send reset link.');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Could not send reset link.");
+            }
         } finally {
             setSubmitting(false);
         }

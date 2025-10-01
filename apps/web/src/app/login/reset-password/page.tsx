@@ -52,8 +52,12 @@ export default function ResetPasswordPage() {
       if (error) throw error;
 
       setNotice('Password updated! You can sign in with your new password.');
-    } catch (err: any) {
-      setError(err?.message || 'Could not update password.');
+    } catch (err: unknown) {
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError("Could not update password.");
+        }
     } finally {
       setSubmitting(false);
     }
