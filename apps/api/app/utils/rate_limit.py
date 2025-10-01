@@ -29,3 +29,20 @@ def throttle(key: str, *, limit: int, window_sec: int) -> Tuple[bool, int]:
 
     q.append(now)
     return (True, 0)
+
+def throttle_multi(key_base: str) -> Tuple[bool, int]:
+    """
+    Apply burst (per-minute) and sustained (per-hour) limits.
+    Returns (allowed, retry_after_seconds).
+    """
+    # tune these defaults as you like
+    BURST_LIMIT = 10     # requests / minute
+    SUSTAIN_LIMIT = 120  # requests / hour
+
+    ok1, r1 = throttle(f"{key_base}:1m", limit=BURST_LIMIT,  window_sec=60)
+    ok2, r2 = throttle(f"{key_base}:1h", limit=SUSTAIN_LIMIT, window_sec=3600)
+
+    if ok1 and ok2:
+        return True, 0
+    # tell client the longest time to wait
+    return False, max(r1, r2)

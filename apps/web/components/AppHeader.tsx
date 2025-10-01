@@ -18,6 +18,8 @@ const link = (href: string, label: string, cur: string) => (
 
 export default function AppHeader() {
   const pathname = usePathname() || '/'
+  const hide = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/forgot-password');
+  if (hide) return null;
   return (
     <header className="border-b bg-white">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3 justify-between">

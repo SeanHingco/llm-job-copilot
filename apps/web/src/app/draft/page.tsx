@@ -1124,7 +1124,7 @@ export default function DraftPage() {
                             id="resumeFile"
                             name="resume_file"
                             type="file"
-                            accept=".pdf,.txt" 
+                            accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                             placeholder="Upload Resume File"
                             className="block w-full text-neutral-800 text-sm file:cursor-pointer file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-neutral-800 hover:file:bg-slate-200"
                             onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}

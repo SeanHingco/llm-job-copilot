@@ -4,7 +4,7 @@ from pydantic import BaseModel, HttpUrl, ValidationError
 from typing import Optional, Literal
 
 from app.utils.llm import generate_text
-from app.utils.rate_limit import throttle
+from app.utils.rate_limit import throttle, throttle_multi
 from app.utils.credits import ensure_daily_free_topup
 
 from app.routers.ingest import ingest as ingest_route
@@ -213,53 +213,51 @@ async def draft_run_form(
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
 ):
-    profile = await get_user_summary(user["user_id"])
-    is_unlimited = bool(profile.get("unlimited"))
-    credits_before = int(profile.get("free_uses_remaining") or 0)
+    user_id = user["user_id"]
 
-
-
-    
-    if not is_unlimited:
-        credits_after = await ensure_daily_free_topup(user["user_id"])
-        credits = credits_after
-    else:
-        credits = credits_before
-    ok, retry = throttle(f"user:{user['user_id']}:run_form", limit=RL_RUN_FORM_PER_MIN, window_sec=60)
+    # 0) Rate limit FIRST (burst + sustained), per user+task
+    ok, retry = throttle_multi(f"user:{user_id}:task:{task}")
     if not ok:
         raise HTTPException(
             status_code=429,
-            detail="Too many requests. Please wait a moment.",
-            headers={
-                "Retry-After": str(retry),
-                "X-RateLimit-Limit": str(RL_RUN_FORM_PER_MIN),
-                "X-RateLimit-Remaining": "0"
-            }
+            detail="Rate limit reached. Please try again shortly.",
+            headers={"Retry-After": str(retry)},
         )
 
-    profile: UserSummary = await get_user_summary(user["user_id"])
-    credits = int(profile["free_uses_remaining"])
-    is_unlimited = bool(profile["unlimited"])
+    # 1) Load profile ONCE
+    profile: UserSummary = await get_user_summary(user_id)
+    is_unlimited = bool(profile.get("unlimited"))
+    credits = int(profile.get("free_uses_remaining") or 0)
 
-    if credits <= 0 and not is_unlimited:
-        raise HTTPException(status_code=402, detail={
-            "code": "INSUFFICIENT_CREDITS",
-            "message": "You are out of credits.",
-            "current_credits": credits
-        })
+    # 2) If not unlimited, apply lazy daily top-up and recheck credits
+    if not is_unlimited:
+        credits = await ensure_daily_free_topup(user_id)
+        if credits <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "message": "You are out of credits.",
+                    "current_credits": credits,
+                },
+            )
 
+    # 3) Extract resume text if a file was uploaded
     if resume_file:
         extracted = await extract_route(resume_file)
-        resume_text = extracted["text"] or ""
+        resume_text = extracted.get("text") or ""
     else:
         resume_text = resume or ""
-    
-    # check if job description comes from url or raw text
+
+    # 4) Validate job source (URL or pasted text)
     if not (job_text and job_text.strip()) and not (url and url.strip()):
-        raise HTTPException(status_code=400, detail="Provide a job URL or paste the job description.")
+        raise HTTPException(
+            status_code=400,
+            detail="Provide a job URL or paste the job description.",
+        )
     url_for_req: Optional[str] = url if not (job_text and job_text.strip()) else None
 
-
+    # 5) Build request
     req = DraftReq(
         task=task,
         url=url_for_req,
@@ -269,21 +267,26 @@ async def draft_run_form(
         job_text=job_text,
     )
 
+    # 6) Run generation (optional: add a 2-slot concurrency cap)
+    # with ConcurrencyGuard(key=f"user:{user_id}", max_in_flight=2):
     data = await _run_generation(req)
-    
+
+    # 7) Return meta, spending credits only for non-unlimited
     if is_unlimited:
-        data["meta"]["remaining_credits"] = profile["free_uses_remaining"]
+        data["meta"]["remaining_credits"] = credits  # unchanged
         data["meta"]["unlimited"] = True
         return data
 
-    remaining = await consume_free_use(user["user_id"])
+    remaining = await consume_free_use(user_id)
     if remaining < 0:
-        # race: someone else spent the last credit in parallel
+        # race: someone else spent last credit in parallel
         raise HTTPException(
             status_code=402,
-            detail={"code": "INSUFFICIENT_CREDITS",
-                    "message": "You are out of credits.",
-                    "current_credits": credits},
+            detail={
+                "code": "INSUFFICIENT_CREDITS",
+                "message": "You are out of credits.",
+                "current_credits": credits,
+            },
         )
 
     data["meta"]["remaining_credits"] = remaining

@@ -1,7 +1,8 @@
 # api/app/main.py
-from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import os, stripe, json, sys, logging, uuid, time
 from datetime import datetime, timezone
 from .routers import ingest
@@ -140,6 +141,27 @@ def health():
 def health_head():
     # No body needed for HEAD; 200 is enough
     return Response(status_code=200)
+
+
+class SyncProfileBody(BaseModel):
+    full_name: str | None = None
+
+@app.post("/auth/sync-profile")
+async def sync_profile(
+    body: SyncProfileBody,
+    who = Depends(verify_user),
+):
+    # who = {"user_id": "...", "email": "..."} returned by your verifier
+    user_id = who.get("user_id")
+    email   = who.get("email")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="No user in token")
+
+    # write into public.users using your service-role upsert
+    await upsert_user(user_id, email=email, name=body.full_name)
+
+    return {"ok": True, "id": user_id, "email": email, "full_name": body.full_name}
 
 @app.get("/me")
 async def me(user = Depends(verify_user)):
