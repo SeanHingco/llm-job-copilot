@@ -2,23 +2,46 @@
 import CTAButtons from "components/CTAButtons";
 
 const features = [
-  { title: "Resume Bullets", copy: "Six impact-focused bullets with evidence and ATS keywords." },
-  { title: "Talking Points", copy: "Strengths, gaps (with mitigation), and likely interview questions." },
-  { title: "Alignment Report", copy: "Coverage %, matched/missing keywords, and suggested edits." },
-  { title: "Cover Letter", copy: "A concise, tailored draft ready to paste." },
+  { title: "Resume Bullets", copy: "Six powerful bullets tailored to the job, packed with evidence and ATS keywords." },
+  { title: "Talking Points", copy: "Show up prepared: strengths, gap fixes, and likely interview questions." },
+  { title: "Alignment Report", copy: "See your match score, missing keywords, and specific edits to improve fit." },
+  { title: "Cover Letter", copy: "A concise draft in the job’s language, ready to paste and send." },
 ];
 
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
+      {/* Header */}
+      <header className="sticky top-0 z-40 w-full border-b border-neutral-900/60 bg-neutral-950/70 backdrop-blur">
+        <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+          <span className="font-semibold tracking-tight">Resume Bender</span>
+          <div className="flex items-center gap-3">
+            <a href="#how-it-works" className="text-sm text-neutral-300 hover:text-white">
+              How it works
+            </a>
+            {/* <a href="/pricing" className="text-sm text-neutral-300 hover:text-white">
+              Pricing
+            </a> */}
+            <a href="/login" className="text-sm text-neutral-300 hover:text-white">
+              Login
+            </a>
+            <a
+              href="/draft"
+              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
+            >
+              Try it free
+            </a>
+          </div>
+        </nav>
+      </header>
+
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pt-24 pb-16">
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
           Tailor your resume to every job in minutes
         </h1>
         <p className="mt-4 text-neutral-300 max-w-2xl">
-          Paste a job, add your resume, pick tasks. Get bullets, talking points, alignment,
-          and a cover letter—fast.
+          Stop guessing what to include. Resume Bender highlights what recruiters look for.
         </p>
 
         <div className="mt-8">
@@ -46,10 +69,10 @@ export default function HomePage() {
         <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           {[
-            { n: "1", t: "Drop the job", d: "Paste the URL or the full description." },
-            { n: "2", t: "Add your resume", d: "Paste text or upload your file." },
-            { n: "3", t: "Pick tasks", d: "Bullets, talking points, alignment, cover letter." },
-            { n: "4", t: "Generate & tweak", d: "Copy into your application." },
+            { n: "1", t: "Drop the job", d: "Paste the job URL or full text description." },
+            { n: "2", t: "Add your resume", d: "Upload a file or paste the text." },
+            { n: "3", t: "Choose your tasks", d: "Bullets, talking points, alignment report, cover letter." },
+            { n: "4", t: "Generate & apply", d: "Review, tweak, and paste into your application." },
           ].map((step) => (
             <li
               key={step.n}

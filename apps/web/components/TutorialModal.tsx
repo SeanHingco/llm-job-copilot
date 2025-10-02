@@ -26,8 +26,9 @@ export default function TutorialModal({ open, onClose }: Props) {
 
         <ol className="list-decimal pl-5 space-y-2 text-sm text-neutral-800">
           <li><strong>Job input:</strong> paste description or URL. If both, we prioritize pasted text.</li>
-          <li><strong>Tasks:</strong> Bullets (6 achievements) and Talking Playbook (strengths, gaps, questions).</li>
-          <li><strong>Tips:</strong> Add a job title & resume text for better alignment.</li>
+          <li><strong>Tasks:</strong> Select one or more task. Each task costs one credit. Hover over each task for more info.</li>
+          <li><strong>Context:</strong> Add a job title & resume text for better alignment.</li>
+          <li><strong>View:</strong> Look at resume or cover letter advice.</li>
         </ol>
 
         <div className="mt-5 flex items-center justify-between">
