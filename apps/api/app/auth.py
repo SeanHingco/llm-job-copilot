@@ -2,6 +2,7 @@ import os, json, base64, httpx
 from pathlib import Path
 from fastapi import Header, HTTPException
 from dotenv import load_dotenv
+from typing import Optional
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -42,3 +43,15 @@ async def verify_supabase_session(authorization: str = Header(None)):
 
     # Bubble up why (helps debug)
     raise HTTPException(status_code=401, detail=f"Invalid token: {r.status_code} {r.text[:200]}")
+
+async def optional_supabase_session(authorization: Optional[str] = Header(None)):
+    """
+    If a Bearer token is present and valid -> return {"user_id", "email"}.
+    If missing or invalid -> return None (don't raise).
+    """
+    if not authorization:
+        return None
+    try:
+        return await verify_supabase_session(authorization=authorization)
+    except Exception:
+        return None

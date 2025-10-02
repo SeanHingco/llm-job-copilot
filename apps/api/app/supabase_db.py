@@ -181,3 +181,41 @@ async def ensure_user_identity(user_id: str, email: str | None = None, name: str
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.patch(f"{REST}/users", params=params, headers=headers, json=patch)
             r.raise_for_status()
+
+# at bottom of supabase_db.py
+
+async def insert_analytics_event(
+    name: str,
+    props: dict[str, Any] | None = None,
+    *,
+    user_id: str | None = None,
+    anon_id: str | None = None,
+    path: str | None = None,
+    ip: str | None = None,
+    ua: str | None = None,
+    client_event_id: str | None = None,
+) -> bool:
+    """
+    Insert a row into analytics_events. Returns True if inserted, False if duplicate ignored.
+    """
+    row = {
+        "name": name,
+        "props": props or {},
+        "path": path,
+        "anon_id": anon_id,
+        "user_id": user_id,
+        "ip": ip,
+        "ua": ua,
+        "client_event_id": client_event_id,
+    }
+
+    headers = {**HEADERS, "Prefer": "resolution=ignore-duplicates"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.post(f"{REST}/analytics_events", headers=headers, json=[row])
+
+    if r.status_code in (201, 204):
+        return r.status_code == 201  # 201 → new insert, 204 → duplicate ignored
+    else:
+        # optional: log error somewhere
+        print("insert_analytics_event error:", r.status_code, r.text[:200])
+        return False

@@ -15,6 +15,7 @@ import PercentRing from "components/PercentRing";
 import TalkingPlaybookView from "components/TalkingPlaybookView";
 import AlignmentView from "components/AlignmentView";
 import CoverLetterView from "components/CoverLetterView";
+import { capture } from "@/lib/analytics";
 
 
 
@@ -130,6 +131,11 @@ export type CompleteSubscriptionResponse = {
 };
 
 // helpers
+const TUT_KEY = "rb:tutorial_seen";
+function markTutorialSeen() {
+  try { localStorage.setItem(TUT_KEY, "1"); } catch {}
+}
+
 const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "bullets",         label: "Resume Bullets" },
   { key: "talking_points",  label: "Talking Points" },
@@ -657,6 +663,7 @@ export default function DraftPage() {
     // }
 
     async function onGenerateAll() {
+        capture("task_run_clicked", { tasks: selectedTasks });
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
         setTaskStatus(Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }])));
 
@@ -995,18 +1002,23 @@ export default function DraftPage() {
 
     return (
         <main className="p-8 space-y-4">
-            <TutorialModal open={showTut} onClose={() => setShowTut(false)} />
+            <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
             <div className="max-w-3xl mx-auto px-4">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex items-center">
                     <h1 className="text-2xl font-bold">Resume Bender</h1>
-                    <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
-                    {/* <SignOutButton />
-                    <Link
-                        href="/account/password"
-                        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-neutral-100"
-                    >
-                        Change password
-                    </Link> */}
+
+                    <div className="ml-auto flex items-center gap-2">
+                        <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
+                        <button
+                            type="button"
+                            onClick={() => setShowTut(true)}
+                            title="Open tutorial"
+                            aria-label="Open tutorial"
+                            className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        >
+                            ?
+                        </button>
+                    </div>
                 </div>
                 <div className="bg-white border rounded-2xl shadow-sm p-6">
                     <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>

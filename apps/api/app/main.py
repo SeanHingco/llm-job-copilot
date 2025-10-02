@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from .routers import ingest
 from .routers import draft
 from .routers import resume
+from .routers import analytics
 from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .utils.security_headers import SecurityHeadersMiddleware
@@ -20,6 +21,7 @@ from .supabase_db import (upsert_user,
                             get_stripe_customer_id,
                             get_user_id_by_customer,
                             insert_webhook_event_once,
+                            insert_analytics_event,
                             set_remaining_and_mark_refill)
 
 
@@ -52,6 +54,18 @@ async def _grant_credits(user_id: str, delta: int) -> int:
     new_total = current + int(delta)
     await set_plan_and_grant(user_id, plan, new_total)
     return new_total
+
+async def _ae_safe(name: str, *, user_id: str | None, props: dict):
+    """Log analytics; never throw."""
+    try:
+        await insert_analytics_event(
+            name=name,
+            user_id=user_id,
+            props=props,
+            path="/stripe/webhook",
+        )
+    except Exception:
+        pass
 
 async def _ensure_current_mode_customer(user_id: str, email: str | None) -> str:
     """
@@ -406,10 +420,29 @@ async def stripe_webhook(request: Request):
                     new_total = await _grant_credits(user_id, grant)  # your existing helper
                     print(f"granted {grant} credits to {user_id} → total {new_total}")
 
+                    await _ae_safe(
+                    "purchase_succeeded",
+                    user_id=user_id,
+                    props={
+                        "kind": "pack",
+                        "sku": price_key,
+                        "grant": grant,
+                    },
+                )
+
         # b) Subscription checkout → link Stripe customer to user
         if mode == "subscription" and user_id and cust_id:
             await upsert_customer(user_id, cust_id)
             print(f"linked Stripe customer {cust_id} to user {user_id}")
+
+            await _ae_safe(
+                "purchase_succeeded",
+                user_id=user_id,
+                props={
+                    "kind": "subscription",
+                    "sku": price_key,
+                },
+            )
 
         return {"received": True}
 
@@ -461,6 +494,15 @@ async def stripe_webhook(request: Request):
             monthly = int(PRICE_CATALOG["sub_starter"]["monthly_allowance"])
             await set_plan_and_grant(user_id, "starter", monthly)
             print("fallback: starter plan applied")
+        
+        await _ae_safe(
+            "subscription_payment_succeeded",
+            user_id=user_id,
+            props={
+                "sku": price_id,
+                "plan": (chosen or {}).get("plan"),
+            },
+        )
 
         return {"received": True}
 
@@ -482,6 +524,12 @@ async def stripe_webhook(request: Request):
             await set_plan_and_grant(user_id, chosen["plan"], remaining)
             print(f"plan updated (no credit change) → user={user_id} plan={chosen['plan']}")
 
+            await _ae_safe(
+                "subscription_updated",
+                user_id=user_id,
+                props={"plan": chosen["plan"], "price_id": price_id},
+            )
+
         return {"received": True}
 
     # 4) Subscription canceled → set plan free, PRESERVE credits
@@ -498,6 +546,12 @@ async def stripe_webhook(request: Request):
         await set_plan_and_grant(user_id, "free", remaining)
         print(f"plan set to free (credits preserved) for user {user_id}")
 
+        await _ae_safe(
+            "subscription_canceled",
+            user_id=user_id,
+            props={"reason": sub.get("cancellation_details", {}).get("reason")},
+        )
+
         return {"received": True}
 
     # Default
@@ -509,3 +563,5 @@ app.include_router(ingest.router)
 app.include_router(draft.router)
 
 app.include_router(resume.router)
+
+app.include_router(analytics.router)

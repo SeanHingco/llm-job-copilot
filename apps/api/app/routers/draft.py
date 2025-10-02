@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Form, UploadFile, File, Depends, Security
+from fastapi import APIRouter, HTTPException, Form, UploadFile, File, Depends, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, HttpUrl, ValidationError
 from typing import Optional, Literal
@@ -12,11 +12,12 @@ from app.routers.ingest import IngestRequest
 from app.routers.resume import extract_resume as extract_route
 
 from app.auth import verify_supabase_session as verify_user
-from app.supabase_db import get_user_summary, consume_free_use
+from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event
 
 import os
 from pathlib import Path
 from string import Template
+import time
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
@@ -47,6 +48,34 @@ def safe_format(template: str, **kwargs) -> str:
         def __missing__(self, key):
             return "{" + key + "}"
     return template.format_map(_SafeDict(**kwargs))
+
+async def _log_event_safe(
+    request: Request | None,
+    *,
+    user_id: str | None,
+    name: str,
+    props: dict
+):
+    """Fire-and-forget analytics; never raises."""
+    try:
+        ip = None
+        ua = None
+        if request is not None:
+            ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+            ua = request.headers.get("user-agent")
+        await insert_analytics_event(
+            name=name,
+            props=props,
+            user_id=user_id,
+            anon_id=None,          # we have a logged-in user here
+            path="/draft/run-form",
+            ip=ip,
+            ua=ua,
+            client_event_id=None,  # backend events don’t need dedupe id
+        )
+    except Exception:
+        pass
+
 
 async def _run_generation(req: DraftReq) -> dict:
     ingest_payload = IngestRequest(
@@ -203,6 +232,7 @@ async def draft_run(req: DraftReq, _creds: HTTPAuthorizationCredentials = Securi
 
 @router.post("/run-form")
 async def draft_run_form(
+    request: Request,
     url: Optional[str] = Form(None),         # was: HttpUrl = Form(...)
     q: Optional[str] = Form(None),
     job_title: Optional[str] = Form(None),
@@ -218,6 +248,10 @@ async def draft_run_form(
     # 0) Rate limit FIRST (burst + sustained), per user+task
     ok, retry = throttle_multi(f"user:{user_id}:task:{task}")
     if not ok:
+        await _log_event_safe(request,
+                              user_id=user["user_id"],
+                              name="rate_limited",
+                              props={"endpoint": "draft/run-form", "task": task, "retry_after": retry})
         raise HTTPException(
             status_code=429,
             detail="Rate limit reached. Please try again shortly.",
@@ -233,6 +267,10 @@ async def draft_run_form(
     if not is_unlimited:
         credits = await ensure_daily_free_topup(user_id)
         if credits <= 0:
+            await _log_event_safe(request,
+                              user_id=user["user_id"],
+                              name="out_of_credits_shown",
+                              props={"endpoint": "draft/run-form"})
             raise HTTPException(
                 status_code=402,
                 detail={
@@ -257,6 +295,12 @@ async def draft_run_form(
         )
     url_for_req: Optional[str] = url if not (job_text and job_text.strip()) else None
 
+    start = time.monotonic()
+    await _log_event_safe(request,
+                          user_id=user["user_id"],
+                          name="task_run_started",
+                          props={"task": task, "unlimited": bool(is_unlimited)})
+
     # 5) Build request
     req = DraftReq(
         task=task,
@@ -269,7 +313,29 @@ async def draft_run_form(
 
     # 6) Run generation (optional: add a 2-slot concurrency cap)
     # with ConcurrencyGuard(key=f"user:{user_id}", max_in_flight=2):
-    data = await _run_generation(req)
+    try:
+        data = await _run_generation(req)
+    except HTTPException as e:
+        if e.status_code not in (402, 429):
+            await _log_event_safe(request,
+                                  user_id=user["user_id"],
+                                  name="task_run_failed",
+                                  props={"task": task, "status": e.status_code})
+        raise
+    except Exception as e:
+        await _log_event_safe(request,
+                              user_id=user["user_id"],
+                              name="task_run_failed",
+                              props={"task": task, "status": 500, "error": str(e)[:200]})
+        raise
+
+    duration_ms = int((time.monotonic() - start) * 1000)
+    credits_spent = 0 if is_unlimited else 1
+
+    await _log_event_safe(request,
+                          user_id=user["user_id"],
+                          name="task_run_completed",
+                          props={"task": task, "duration_ms": duration_ms, "credits_spent": credits_spent})
 
     # 7) Return meta, spending credits only for non-unlimited
     if is_unlimited:
