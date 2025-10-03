@@ -16,6 +16,16 @@ export const metadata = {
 };
 
 export default function HomePage() {
+  const faq = {
+    "@context":"https://schema.org",
+    "@type":"FAQPage",
+    "mainEntity":[
+      {"@type":"Question","name":"Will this help me pass ATS?","acceptedAnswer":{"@type":"Answer","text":"Yes. We analyze formatting and keywords, then suggest fixes so your resume parses and matches the job posting."}},
+      {"@type":"Question","name":"Is there a free plan?","acceptedAnswer":{"@type":"Answer","text":"Yes. You can try core features free and upgrade for unlimited tasks and advanced options."}},
+      {"@type":"Question","name":"How fast are results?","acceptedAnswer":{"@type":"Answer","text":"Most drafts generate in under a minute—resume bullets, cover letters, and ATS insights."}}
+    ]
+  };
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Header */}
@@ -105,6 +115,12 @@ export default function HomePage() {
           We don’t sell your data. You control what’s stored and can delete it anytime.
         </p>
       </section>
+
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faq) }}
+      />
     </main>
   );
 }
