@@ -484,12 +484,12 @@ function hasKey<K extends string>(
 }
 
 
-export const metadata = {
-  title: 'Draft — AI Resume Builder & ATS Checks | Resume Bender',
-  description:
-    'One workspace to generate ATS-friendly resume bullets, tailored cover letters, and alignment insights. Paste a job post and get results in minutes.',
-  alternates: { canonical: 'https://resume-bender.seanhing.co/draft' },
-};
+// export const metadata = {
+//   title: 'Draft — AI Resume Builder & ATS Checks | Resume Bender',
+//   description:
+//     'One workspace to generate ATS-friendly resume bullets, tailored cover letters, and alignment insights. Paste a job post and get results in minutes.',
+//   alternates: { canonical: 'https://resume-bender.seanhing.co/draft' },
+// };
 
 export default function DraftPage() {
     // initialize states
