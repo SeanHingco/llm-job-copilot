@@ -8,6 +8,13 @@ const features = [
   { title: "Cover Letter", copy: "A concise draft in the job’s language, ready to paste and send." },
 ];
 
+export const metadata = {
+  title: 'Resume Bender — AI Resume Builder & ATS Checker',
+  description:
+    'Generate ATS-friendly resume bullets and tailored cover letters. Score your resume, fix issues, and apply with confidence—fast.',
+  alternates: { canonical: 'https://resume-bender.seanhing.co/' },
+};
+
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
@@ -38,7 +45,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pt-24 pb-16">
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-          Tailor your resume to every job in minutes
+          AI Resume Builder, ATS Checker, Cover Letter Assistant
         </h1>
         <p className="mt-4 text-neutral-300 max-w-2xl">
           Stop guessing what to include. Resume Bender highlights what recruiters look for.

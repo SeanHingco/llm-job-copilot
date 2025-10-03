@@ -16,6 +16,7 @@ import TalkingPlaybookView from "components/TalkingPlaybookView";
 import AlignmentView from "components/AlignmentView";
 import CoverLetterView from "components/CoverLetterView";
 import { capture } from "@/lib/analytics";
+import Head from 'next/head';
 
 
 
@@ -483,7 +484,12 @@ function hasKey<K extends string>(
 }
 
 
-
+export const metadata = {
+  title: 'Draft — AI Resume Builder & ATS Checks | Resume Bender',
+  description:
+    'One workspace to generate ATS-friendly resume bullets, tailored cover letters, and alignment insights. Paste a job post and get results in minutes.',
+  alternates: { canonical: 'https://resume-bender.seanhing.co/draft' },
+};
 
 export default function DraftPage() {
     // initialize states
@@ -1001,6 +1007,15 @@ export default function DraftPage() {
     const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && (!outOfCredits || isUnlimited);
 
     return (
+        <>
+        <Head>
+            <title>Draft — AI Resume Builder & ATS Checks | Resume Bender</title>
+            <meta
+            name="description"
+            content="One workspace to generate ATS-friendly resume bullets, tailored cover letters, and alignment insights. Paste a job post and get results in minutes."
+            />
+            <link rel="canonical" href="https://resume-bender.seanhing.co/draft" />
+        </Head>
         <main className="p-8 space-y-4">
             <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
             <div className="max-w-3xl mx-auto px-4">
@@ -1299,5 +1314,6 @@ export default function DraftPage() {
                 )}
             </div>
         </main>
+        </>
     );
 }
