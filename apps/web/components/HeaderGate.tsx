@@ -4,7 +4,7 @@
 import { usePathname } from 'next/navigation';
 import AppHeader from './AppHeader';
 
-const HIDE_ON = ['/login']; // add '/auth' if you ever use that route
+const HIDE_ON = ['/login', '/features']; // add '/auth' if you ever use that route
 
 export default function HeaderGate() {
   const pathname = usePathname();

@@ -38,6 +38,12 @@ export default function HomePage() {
             >
               Try it free
             </a>
+            <a
+              href="/features"
+              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
+            >
+              Features
+            </a>
           </div>
         </nav>
       </header>
