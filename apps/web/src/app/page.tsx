@@ -26,6 +26,22 @@ export default function HomePage() {
     ]
   };
 
+  const org = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Resume Bender",
+    "url": "https://resume-bender.seanhing.co/",
+    "logo": "https://resume-bender.seanhing.co/og.png"
+  };
+
+  const website = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Resume Bender",
+    "url": "https://resume-bender.seanhing.co/"
+  };
+
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Header */}
@@ -120,6 +136,16 @@ export default function HomePage() {
         type="application/ld+json"
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faq) }}
+      />
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }}
+      />
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(website) }}
       />
     </main>
   );
