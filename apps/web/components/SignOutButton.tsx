@@ -12,7 +12,7 @@ export default function SignOutButton({ className = '' }: { className?: string }
             await supabase.auth.signOut();
 
             try { localStorage.removeItem('rb:credits'); } catch {}
-            router.replace('/login');
+            router.replace('/');
         } finally {
             setLoading(false);
         }

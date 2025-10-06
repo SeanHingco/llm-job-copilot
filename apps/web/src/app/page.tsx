@@ -52,6 +52,12 @@ export default function HomePage() {
             <a href="#how-it-works" className="text-sm text-neutral-300 hover:text-white">
               How it works
             </a>
+            <a
+              href="/features"
+              className="text-sm text-neutral-300 hover:text-white"
+            >
+              Features
+            </a>
             {/* <a href="/pricing" className="text-sm text-neutral-300 hover:text-white">
               Pricing
             </a> */}
@@ -63,12 +69,6 @@ export default function HomePage() {
               className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
             >
               Try it free
-            </a>
-            <a
-              href="/features"
-              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
-            >
-              Features
             </a>
           </div>
         </nav>
