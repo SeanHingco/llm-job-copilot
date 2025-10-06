@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import SignOutButton from 'components/SignOutButton'
+import Brand from 'components/Brand'
 
 const link = (href: string, label: string, cur: string) => (
   <Link
@@ -23,6 +24,7 @@ export default function AppHeader() {
   return (
     <header className="border-b bg-white">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3 justify-between">
+        <Brand />
         <div className="flex items-center gap-2">
           {link('/draft', 'Application Insights', pathname)}
           {link('/account', 'Account', pathname)}
