@@ -36,7 +36,7 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 _CORS_SOURCES = (
     os.getenv("CORS_ALLOW_ORIGINS")
     or os.getenv("CORS_ORIGINS")
-    or "https://resume-bender.seanhing.co,http://localhost:3000,http://127.0.0.1:3000"
+    or "https://resume-bender.seanhing.co,http://localhost:3000,http://127.0.0.1:3000,https://www.resumebender.com"
 )
 ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in _CORS_SOURCES.split(",") if o.strip()]
 VERCEL_PREVIEW_REGEX = r"^https://[a-z0-9-]+-git-[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$"
