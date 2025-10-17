@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -12,11 +13,31 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   // Make sure we actually have a valid recovery session
   useEffect(() => {
     let mounted = true;
+
     (async () => {
+      const code = searchParams.get('code');
+
       try {
+        if (code) {
+          // 1) Exchange code for a session
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+
+          // 2) Strip the code from the URL so refresh/back doesn't re-use it
+          if (mounted) {
+            setSessionReady(true);
+            router.replace('/login/reset-password');
+          }
+          return;
+        }
+
+        // Fallback: if no code, just check if we already have a session
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
         setSessionReady(Boolean(data.session));
@@ -29,8 +50,9 @@ export default function ResetPasswordPage() {
         setError('Unable to verify reset session.');
       }
     })();
+
     return () => { mounted = false; };
-  }, []);
+  }, [searchParams, router, supabase]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +92,7 @@ export default function ResetPasswordPage() {
         <div className="w-full max-w-sm grid gap-3">
           <h1 className="text-2xl font-bold">Reset your password</h1>
           <p className="text-sm text-red-600">{error}</p>
-          <Link href="/forgot-password" className="text-indigo-400 hover:text-indigo-300 text-sm">
+          <Link href="/login/forgot-password" className="text-indigo-400 hover:text-indigo-300 text-sm">
             Request a new reset link →
           </Link>
         </div>
