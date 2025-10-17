@@ -41,10 +41,11 @@ function ResetPasswordInner() {
           setExpired(true);
           setErrorMsg('This reset link is invalid or has expired. Please request a new one.');
         }
-      } catch (e: any) {
+      } catch (err) {
         if (!mounted) return;
+        const msg = err instanceof Error ? err.message : String(err);
         setExpired(true);
-        setErrorMsg(e?.message || 'Unable to verify reset session.');
+        setErrorMsg(msg || 'Unable to verify reset session.');
       }
     })();
     return () => { mounted = false; };
