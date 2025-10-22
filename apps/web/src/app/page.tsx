@@ -80,7 +80,7 @@ export default function HomePage() {
           AI that tailors your resume to any job in minutes.
         </h1>
         <p className="mt-4 max-w-2xl text-neutral-200 text-base md:text-lg leading-relaxed">
-         Stop guessing what to include. Resume Bender's AI-powered software analyzes job descriptions to pinpoint what recruiters look for.
+         Stop guessing what to include. Resume Bender&rsquo;s AI-powered software analyzes job descriptions to pinpoint what recruiters look for.
         </p>
 
         <div className="mt-8">
