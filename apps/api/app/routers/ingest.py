@@ -8,6 +8,7 @@ from app.utils.retrieve import rank_chunks_by_keywords
 from urllib.parse import urlparse, parse_qs
 from typing import Optional
 import json
+import os
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -20,6 +21,30 @@ BROWSER_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+JS_PLACEHOLDERS = (
+    "enable javascript", "requires javascript", "<noscript", "turn on javascript"
+)
+
+def _looks_js_shell(text_or_html: str) -> bool:
+    t = (text_or_html or "").lower()
+    return any(p in t for p in JS_PLACEHOLDERS)
+
+async def _fetch_rendered_html(url: str, timeout_ms: int = 12000) -> str:
+    # Lazy import so Playwright is only required when we actually render
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            context = await browser.new_context(user_agent=BROWSER_HEADERS["User-Agent"])
+            page = await context.new_page()
+            await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+            # give SPAs a short beat to hydrate
+            await page.wait_for_timeout(500)
+            return await page.content()
+        finally:
+            await browser.close()
+
 
 def _indeed_mobile_fallback(url: str) -> Optional[str]:
     """
@@ -276,6 +301,26 @@ async def ingest(req: IngestRequest):
 
             # Extract once (this already falls back to JSON-LD / __NEXT_DATA__)
             title, text = _extract_text_robust(raw_html)
+
+            ENABLE_RENDER = (os.getenv("ENABLE_RENDERED_FETCH") == "1")
+            needs_render = (len(text) < 500) or _looks_js_shell(raw_html) or _looks_js_shell(text)
+
+            if ENABLE_RENDER and needs_render:
+                try:
+                    rendered_html = await _fetch_rendered_html(final_url)
+                    title_r, text_r = _extract_text_robust(rendered_html)
+                    if len(text_r) > len(text):  # keep the better extraction
+                        title, text = title_r, text_r
+                    try:
+                        print(f"INGEST_RENDER used len={len(text)} url={final_url}")
+                    except Exception:
+                        pass
+                except Exception as _e:
+                    # soft-fail: keep static extraction
+                    try:
+                        print(f"INGEST_RENDER error={_e}")
+                    except Exception:
+                        pass
 
             # Gentle blocker check (now final_url is defined)
             if _looks_blocked(raw_html, text, final_url):
