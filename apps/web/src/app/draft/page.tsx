@@ -691,13 +691,19 @@ export default function DraftPage() {
         try {
             for (const taskToRun of selectedTasks) {
             const fd = new FormData();
-            if (url) fd.append("url", url);
-            if (jobText) fd.append("job_text", jobText);
+            if (jobText) {
+              fd.append("job_text", jobText);
+            } else if (url) {
+              fd.append("url", url);
+            }
             fd.append("task", taskToRun);
             if (q) fd.append("q", q);
             if (jobTitle) fd.append("job_title", jobTitle);
-            if (resumeFile) fd.append("resume_file", resumeFile);
-            else if (resumeText) fd.append("resume", resumeText);
+            if (resumeText) {
+              fd.append("resume", resumeText);
+            } else if (resumeFile) {
+              fd.append("resume_file", resumeFile);
+            }
 
             setPhase(taskToRun, "running");
 

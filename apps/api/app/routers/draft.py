@@ -120,6 +120,15 @@ async def _run_generation(req: DraftReq) -> dict:
         },
     }
 
+def _is_readable(s: str) -> bool:
+    s = (s or "").strip()
+    if len(s) < 200:               # too short to be a resume
+        return False
+    # heuristic: require mostly word-ish characters
+    import re
+    letters = len(re.findall(r"[A-Za-z]", s))
+    return letters / max(1, len(s)) > 0.20
+
 def fill_prompt(template: str, *, job_title: str, context: str, resume: str, jd_keywords: str = "") -> str:
     # 1) $… placeholders
     t = Template(template).safe_substitute(
@@ -281,13 +290,27 @@ async def draft_run_form(
             )
 
     # 3) Extract resume text if a file was uploaded
+    text_from_form = (resume or "").strip()
+    text_from_file = ""
     if resume_file:
         extracted = await extract_route(resume_file)
-        resume_text = extracted.get("text") or ""
-    else:
-        resume_text = resume or ""
+        text_from_file = (extracted.get("text") or "").strip()
+
+    resume_text = text_from_form or text_from_file
 
     # 4) Validate job source (URL or pasted text)
+    if not resume_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read your resume. Paste text or upload a file."
+        )
+    
+    if not _is_readable(resume_text):
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text."
+        )
+
     if not (job_text and job_text.strip()) and not (url and url.strip()):
         raise HTTPException(
             status_code=400,
