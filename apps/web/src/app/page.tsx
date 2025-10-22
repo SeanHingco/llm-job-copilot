@@ -106,6 +106,9 @@ export default function HomePage() {
       {/* How it works */}
       <section id="how-it-works" className="mx-auto max-w-5xl px-6 pb-24">
         <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
+        <p className="mt-2 text-neutral-300">
+          4 easy steps to tailor your resume in minutes.
+        </p>
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           {[
             { n: "1", t: "Drop the job", d: "Paste the job URL or full text description." },

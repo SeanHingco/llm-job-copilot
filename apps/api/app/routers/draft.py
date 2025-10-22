@@ -6,6 +6,7 @@ from typing import Optional, Literal
 from app.utils.llm import generate_text
 from app.utils.rate_limit import throttle, throttle_multi
 from app.utils.credits import ensure_daily_free_topup
+from app.utils.jd_fetch import fetch_jd_text
 
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
