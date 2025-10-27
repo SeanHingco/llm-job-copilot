@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/RequireAuth';
 import { supabase } from '@/lib/supabaseClient';
 
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "seanescan@gmail.com";
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@resumebender.com";
 
 export default function AccountPage() {
     const { ready } = useRequireAuth();

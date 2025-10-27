@@ -9,7 +9,7 @@ export default function Footer() {
         <nav className="flex items-center gap-4">
           <Link href="/legal/terms" className="hover:underline">Terms</Link>
           <Link href="/legal/privacy" className="hover:underline">Privacy</Link>
-          <a href="mailto:seanescan@gmail.com" className="hover:underline">Contact</a>
+          <a href="mailto:support@resumebender.com" className="hover:underline">Contact</a>
         </nav>
       </div>
     </footer>
