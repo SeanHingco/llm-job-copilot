@@ -23,7 +23,6 @@ export default function AppHeader() {
   const hide = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/forgot-password');
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  if (hide) return null;
 
   useEffect(() => {
     if (!open) return;
@@ -47,7 +46,7 @@ export default function AppHeader() {
     return () => { document.body.style.overflow = prev; };
   }, [open]);
 
-  return (
+  return hide ? null : (
     <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="relative mx-auto max-w-5xl px-4 py-3 flex items-center gap-3 justify-between">
         <Brand />
