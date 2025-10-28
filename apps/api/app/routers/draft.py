@@ -19,12 +19,26 @@ import os
 from pathlib import Path
 from string import Template
 import time
+import re
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
 Task = Literal["bullets", "talking_points", "cover_letter", "alignment"]
 PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
+REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment"}
+
+NEG_PATTERNS = [
+    "job not found", "position closed", "no longer available", "this job has expired",
+    "we can't find that job", "career site error", "page not found", "404",
+    "no longer accepting applications"
+]
+
+POS_PATTERNS = [
+    "responsibilities", "requirements", "qualifications", "about the role",
+    "what you'll do", "what you will do", "what we’re looking for", "about you",
+    "preferred qualifications", "nice to have"
+]
 
 class DraftReq(BaseModel):
     task: Task = "bullets"
@@ -49,6 +63,40 @@ def safe_format(template: str, **kwargs) -> str:
         def __missing__(self, key):
             return "{" + key + "}"
     return template.format_map(_SafeDict(**kwargs))
+
+def looks_like_job_context(text: str, result: dict) -> tuple[bool, str]:
+    """
+    Returns (is_valid, reason).
+    Uses length + keywords + ingest meta to judge whether 'text' resembles a real JD.
+    """
+    t = (text or "").strip()
+    if not t:
+        return (False, "empty")
+
+    # Use ingest meta if available
+    ctx_chars = int(result.get("context_chars") or 0)
+    if ctx_chars < 300 and len(t) < 300:
+        return (False, "too_short")
+
+    lo = t.lower()
+    if any(p in lo for p in NEG_PATTERNS):
+        return (False, "not_found_marker")
+
+    # If we have typical JD sections, that is a strong positive
+    if any(p in lo for p in POS_PATTERNS):
+        return (True, "jd_sections_present")
+
+    # If ingest selected any chunks, that is also a decent positive signal
+    sel = result.get("selected_indices")
+    if isinstance(sel, list) and len(sel) > 0:
+        return (True, "selected_chunks_present")
+
+    # Fallback: check basic letter density
+    letters = len(re.findall(r"[A-Za-z]", t))
+    if letters / max(1, len(t)) < 0.15:
+        return (False, "low_text_density")
+
+    return (True, "heuristic_ok")
 
 async def _log_event_safe(
     request: Request | None,
@@ -88,6 +136,21 @@ async def _run_generation(req: DraftReq) -> dict:
 
     context = result.get("context") or result.get("context_preview") or ""
     job_title = req.job_title or result.get("title") or ""
+
+    if req.task in REQUIRES_JOB:
+        has_pasted_jd = bool(req.job_text and req.job_text.strip())
+        is_valid_ctx, why = looks_like_job_context(context, result)
+        if not (has_pasted_jd or is_valid_ctx):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "JOB_CONTEXT_INVALID",
+                    "reason": why,
+                    "message": "We couldn't fetch a valid job description. Paste the JD or try a different URL."
+                },
+            )
+
+
     template = load_task_template(req.task)
     jd_keywords = ""
     # if your ingest adds something like result["target_keywords"], you can do:
@@ -185,11 +248,29 @@ def load_task_template(task: str) -> str:
 @router.post("")
 async def draft(req: DraftReq):
     # 1) Reuse ingest pipeline to get context (no model yet)
-    ingest_payload = IngestRequest(url=req.url, q=req.q)
+    ingest_payload = IngestRequest(url=req.url, q=req.q, text=req.job_text or None)
     result = await ingest_route(ingest_payload)
 
     context = result.get("context_preview") or ""
     filled_title = req.job_title or result.get("title") or ""
+
+    if req.task in REQUIRES_JOB:
+        has_pasted_jd = bool(req.job_text and req.job_text.strip())
+        ok, why = looks_like_job_context(context, result)
+        if not (has_pasted_jd or ok):
+            # Return a preview that explains *why* we won’t generate
+            return {
+                "prompt": "",
+                "meta": {
+                    "final_url": result.get("final_url"),
+                    "selected_indices": result.get("selected_indices"),
+                    "context_chars": result.get("context_chars"),
+                    "title_from_page": result.get("title"),
+                    "job_context_valid": False,
+                    "job_context_reason": why,
+                }
+            }
+
     template = load_task_template(req.task)
     prompt = template.format(
         job_title=filled_title,

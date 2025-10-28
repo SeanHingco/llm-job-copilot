@@ -573,7 +573,7 @@ export default function DraftPage() {
     }
 
     // initialize styling
-    const inputBase = "w-full rounded-lg border border-slate-300 bg-black px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+    const inputBase = "w-full rounded-lg border border-slate-300 bg-black px-3 py-3 text-base md:py-2.5 md:text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
     const labelBase = "text-sm text-neutral-800 font-medium";
 
     // set API location
@@ -770,9 +770,34 @@ export default function DraftPage() {
         }
     }
 
+    function friendlyFallback(task: Task, raw: string): string {
+      // quick hints by task; keep it short + actionable
+      const generic = "We couldn’t format this result. Try pasting the job description or re-running.";
+      if (task === "cover_letter") {
+        return [
+          "We couldn’t produce a structured cover letter.",
+          "If the job link is JS-only, paste the job description text.",
+          "If your resume doesn’t match the role, try a closer role or add a relevant project."
+        ].join(" ");
+      }
+      if (task === "alignment") {
+        return "We couldn’t compute alignment. Paste the job description or try a different role.";
+      }
+      if (task === "bullets") {
+        return "We couldn’t format resume bullets. Paste the job description or re-run.";
+      }
+      if (task === "talking_points") {
+        return "We couldn’t format talking points. Paste the job description or re-run.";
+      }
+      return generic;
+    }
+
     function formatResult(task: Task, r: TaskResult | undefined): string {
         if (!r) return "";
-        if (!r.json) return r.raw || "";
+        if (!r.json) {
+          // show a friendly explanation in the main panel…
+          return friendlyFallback(task, r.raw || "");
+        }
         const j = r.json as AnyJSON;
 
         if (isBullets(j)) {
@@ -1022,9 +1047,9 @@ export default function DraftPage() {
             />
             <link rel="canonical" href="https://resume-bender.seanhing.co/draft" />
         </Head>
-        <main className="p-8 space-y-4">
+        <main className="p-4 md:p-8 space-y-4">
             <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
-            <div className="max-w-3xl mx-auto px-4">
+            <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4">
                 <div className="mb-3 flex items-center">
                     <h1 className="text-2xl font-bold">Resume Bender</h1>
 
@@ -1041,134 +1066,150 @@ export default function DraftPage() {
                         </button>
                     </div>
                 </div>
-                <div className="bg-white border rounded-2xl shadow-sm p-6">
-                    <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>
-                        <label htmlFor="url" className={labelBase}>Job URL</label>
-                        <input
-                            id="url"
-                            name="url"
-                            type="url"
-                            placeholder='https://www.example.com'
-                            className={inputBase}
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            required
-                        />
-
-                        <label htmlFor="job_text" className={labelBase}>Job description (optional)</label>
-                        <textarea
-                            id="job_text"
-                            name="job_text"
-                            rows={8}
-                            placeholder="Paste the full job description here. If provided, we’ll use this instead of fetching the URL."
-                            className={inputBase}
-                            value={jobText}
-                            onChange={(e) => setJobText(e.target.value)}
-                        />
-                        <small className="text-neutral-500">
-                            You can provide a URL, paste the description, or both. If pasted, we’ll ignore the URL fetch.
-                        </small>
-
-                        <label htmlFor="job_title" className={labelBase}>Job title (optional)</label>
-                        <input
-                            id="jobTitle"
-                            name="job_title"
-                            type="text"
-                            placeholder='Job title'
-                            className={inputBase}
-                            value={jobTitle}
-                            onChange={(e) => setJobTitle(e.target.value)}
-                        />
-                        
-                        <label className={labelBase}>Tasks</label>
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                            {TASK_OPTIONS.map(opt => {
-                                const st = taskStatus[opt.key]?.phase;
-                                const details = TASK_DETAILS[opt.key]; 
-                                return (
-                                    <label key={opt.key} className="inline-flex items-center gap-2 text-sm text-neutral-800">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 rounded border-slate-300"
-                                            checked={selectedTasks.includes(opt.key)}
-                                            onChange={() => toggleTask(opt.key)}
-                                        />
-                                        <span>{opt.label}</span>
-
-                                        {/* cost badge */}
-                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
-                                            {details.cost} credits
-                                        </span>
-
-                                        <Tooltip content={
-                                            <span>
-                                                {details.info}
-                                                <br />
-                                                <span className="text-neutral-500">Est. cost: {details.cost} credits</span>
-                                            </span>
-                                        }>
-                                            <button
-                                                type="button"
-                                                aria-label={`${opt.label} info`}
-                                                className="h-5 w-5 inline-flex items-center justify-center rounded-full border text-[10px] text-neutral-700 hover:bg-neutral-100"
-                                                tabIndex={0}
-                                            >
-                                            i
-                                            </button>
-                                        </Tooltip>
-
-                                        {st === "running" && (
-                                            <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" aria-label="Generating" />
-                                        )}
-                                        {st === "queued" && (
-                                            <span className="text-xs text-neutral-500">Queued</span>
-                                        )}
-                                        {st === "done" && (
-                                            <span className="text-xs font-medium text-green-600">Done</span>
-                                        )}
-                                        {st === "error" && (
-                                            <span className="text-xs font-medium text-red-600" title={taskStatus[opt.key]?.message}>
-                                            Error
-                                            </span>
-                                        )}
-                                    </label>
-                                );
-                                })}
+                <div className="bg-white border rounded-2xl shadow-sm p-4 md:p-6">
+                    <form className="grid grid-cols-1 gap-4 md:gap-6" onSubmit={(e) => e.preventDefault()}>
+                        <div className="space-y-2">
+                          <label htmlFor="url" className={labelBase}>Job URL</label>
+                          <input
+                              id="url"
+                              name="url"
+                              type="url"
+                              placeholder='https://www.example.com'
+                              className={inputBase}
+                              value={url}
+                              onChange={(e) => setUrl(e.target.value)}
+                              required
+                          />
                         </div>
-                        <small className="text-neutral-500">
-                            Select one or more tasks to run.
-                        </small>
+                        <div className="space-y-2">
+                          <label htmlFor="job_text" className={labelBase}>Job description (optional)</label>
+                          <textarea
+                              id="job_text"
+                              name="job_text"
+                              rows={8}
+                              placeholder="Paste the full job description here. If provided, we’ll use this instead of fetching the URL."
+                              className={`${inputBase} min-h-28 md:min-h-40 leading-relaxed`}
+                              value={jobText}
+                              onChange={(e) => setJobText(e.target.value)}
+                          />
+                          <small className="text-neutral-500 mt-1 md:mt-0">
+                              You can provide a URL, paste the description, or both. If pasted, we’ll ignore the URL fetch.
+                          </small>
+                        </div>
 
+                        <div className="space-y-2">
+                          <label htmlFor="job_title" className={labelBase}>Job title (optional)</label>
+                          <input
+                              id="job_title"
+                              name="job_title"
+                              type="text"
+                              placeholder='Job title'
+                              className={inputBase}
+                              value={jobTitle}
+                              onChange={(e) => setJobTitle(e.target.value)}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className={labelBase}>Tasks</label>
+                          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-2">
+                              {TASK_OPTIONS.map(opt => {
+                                  const st = taskStatus[opt.key]?.phase;
+                                  const details = TASK_DETAILS[opt.key]; 
+                                  return (
+                                      <label key={opt.key} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800">
+                                          <input
+                                              type="checkbox"
+                                              className="h-4 w-4 rounded border-slate-300"
+                                              checked={selectedTasks.includes(opt.key)}
+                                              onChange={() => toggleTask(opt.key)}
+                                          />
+                                          <span>{opt.label}</span>
 
-                        <label htmlFor="resume" className={labelBase}>Resume text (optional)</label>
-                        <textarea
-                            id="resume"
-                            name="resume"
-                            placeholder="Resume"
-                            rows={6}
-                            className={inputBase}
-                            value={resumeText}
-                            onChange={(e) => setResumeText(e.target.value)}
-                        >
-                        </textarea>
+                                          {/* cost badge */}
+                                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                              {details.cost} credits
+                                          </span>
+                                          <div className="hidden md:inline-flex">
+                                            <Tooltip content={
+                                                <span>
+                                                    {details.info}
+                                                    <br />
+                                                    <span className="text-neutral-500">Est. cost: {details.cost} credits</span>
+                                                </span>
+                                            }>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`${opt.label} info`}
+                                                    className="h-5 w-5 inline-flex items-center justify-center rounded-full border text-[10px] text-neutral-700 hover:bg-neutral-100"
+                                                    tabIndex={0}
+                                                >
+                                                i
+                                                </button>
+                                            </Tooltip>
+                                          </div>
 
-                        <label htmlFor="resume_file" className={labelBase}>Resume file (PDF/TXT)</label>
-                        <input
-                            id="resumeFile"
-                            name="resume_file"
-                            type="file"
-                            accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                            placeholder="Upload Resume File"
-                            className="block w-full text-neutral-800 text-sm file:cursor-pointer file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-neutral-800 hover:file:bg-slate-200"
-                            onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-                        />
+                                          {st === "running" && (
+                                              <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" aria-label="Generating" />
+                                          )}
+                                          {st === "queued" && (
+                                              <span className="text-xs text-neutral-500">Queued</span>
+                                          )}
+                                          {st === "done" && (
+                                              <span className="text-xs font-medium text-green-600">Done</span>
+                                          )}
+                                          {st === "error" && (
+                                              <span className="text-xs font-medium text-red-600" title={taskStatus[opt.key]?.message}>
+                                              Error
+                                              </span>
+                                          )}
+                                      </label>
+                                  );
+                                  })}
+                          </div>
+                          <small className="text-neutral-500 mt-1 md:mt-0">
+                              Select one or more tasks to run.
+                          </small>
+                        </div>
+
+                        
+                        
+                        <div className="space-y-2">
+                          <label htmlFor="resume_file" className={labelBase}>Resume file (PDF/TXT)</label>
+                          <input
+                              id="resumeFile"
+                              name="resume_file"
+                              type="file"
+                              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                              placeholder="Upload Resume File"
+                              className="block w-full text-neutral-800 text-sm file:cursor-pointer file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-neutral-800 hover:file:bg-slate-200"
+                              onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+                          />
                         {/* {resumeFile && <small>Selected: {resumeFile.name}</small>} */}
+                        </div>
+
+                        <div className="space-y-2">
+                          <label htmlFor="resume" className={labelBase}>Resume text (optional)</label>
+                          <textarea
+                              id="resume"
+                              name="resume"
+                              placeholder="Resume"
+                              rows={6}
+                              className={`${inputBase} min-h-28 md:min-h-40 leading-relaxed`}
+                              value={resumeText}
+                              onChange={(e) => setResumeText(e.target.value)}
+                          >
+                          </textarea>
+                          <small className="text-neutral-500 mt-1 md:mt-0">
+                              You can provide a resume file, paste the text, or both. If pasted, we’ll ignore the uploaded file.
+                          </small>
+                        </div>
 
                         {/* Submit */}
                         <button 
                             type="button" 
                             onClick={onGenerateAll}
-                            className="inline-flex justify-center items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full md:w-auto inline-flex justify-center items-center rounded-lg bg-indigo-600 px-5 py-3 text-base md:text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={!canSubmit}>
                                 {isUnlimited ? (isGenerating ? "Generating…" : "Get Resume Insights")
                                     : (outOfCredits ? "Out of credits" : (isGenerating ? "Generating…" : "Get Resume Insights"))}
@@ -1214,7 +1255,7 @@ export default function DraftPage() {
                         return (
                             <section key={t}>
                             <h2 className="text-lg font-bold mb-2">{title}</h2>
-                            {/* {r?.raw && (
+                            {r?.raw && (
                             <details className="mt-2">
                                 <summary className="cursor-pointer text-sm text-neutral-600 hover:underline">
                                 Show raw model output
@@ -1223,7 +1264,7 @@ export default function DraftPage() {
                                 {r.raw}
                                 </pre>
                             </details>
-                            )} */}
+                            )}
                             {t === "bullets" ? (
                                 (() => {
                                     const j = r?.json;
