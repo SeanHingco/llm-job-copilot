@@ -65,7 +65,7 @@ export default function HomePage() {
               Login
             </a>
             <a
-              href="/draft"
+              href="/login"
               className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
             >
               Try it free
