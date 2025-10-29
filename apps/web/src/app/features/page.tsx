@@ -25,7 +25,7 @@ export default function FeaturesPage() {
         <p>Generate tailored drafts from your resume and the job description in minutes.</p>
       </section>
 
-      <p><a className="underline" href="/draft">Start the AI resume builder</a></p>
+      <p><a className="underline" href="/login">Start the AI resume builder</a></p>
     </main>
   );
 }
