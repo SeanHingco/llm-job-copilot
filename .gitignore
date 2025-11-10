@@ -27,3 +27,4 @@ coverage/
 /ml/tests/*
 .venv-prompt
 /tests/*
+/marketing/*
