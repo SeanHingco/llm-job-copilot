@@ -1,18 +1,20 @@
 // app/r/[code]/route.ts
+import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+
+type RouteContext = {
+  params: { code: string }
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! // server-only
 )
 
-export async function GET(
-  req: Request,
-  { params }: { params: { code: string } }
-) {
+export async function GET(req: NextRequest, ctx: RouteContext) {
   const url = new URL(req.url)
-  const code = decodeURIComponent(params.code || '').trim()
+  const code = decodeURIComponent(ctx.params.code || '').trim()
   if (!code) return NextResponse.redirect(new URL('/login', url))
 
   // ensure code exists
@@ -26,7 +28,7 @@ export async function GET(
     return NextResponse.redirect(new URL('/login?ref=invalid', url))
   }
 
-  // read headers from the request (works in all Next versions)
+  // read headers from the request
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||
