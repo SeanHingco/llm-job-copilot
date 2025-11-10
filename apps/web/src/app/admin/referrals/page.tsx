@@ -12,6 +12,8 @@ type Row = {
   last_conversion_at: string | null
 }
 
+type ApiResponse = { rows?: Row[] }
+
 export default function AdminReferralsPage() {
   const router = useRouter()
   const [rows, setRows] = useState<Row[] | null>(null)
@@ -28,10 +30,12 @@ export default function AdminReferralsPage() {
           headers: { Authorization: `Bearer ${token}` }
         })
         if (res.status === 401 || res.status === 403) { router.replace('/'); return }
-        const json = await res.json()
-        if (!cancelled) setRows(json.rows || [])
-      } catch (e: any) {
-        if (!cancelled) setErr(e?.message || 'Failed to load')
+
+        const json: ApiResponse = await res.json()   // <- typed
+        if (!cancelled) setRows(json.rows ?? [])
+      } catch (e: unknown) {                         // <- no any
+        const message = e instanceof Error ? e.message : 'Failed to load'
+        if (!cancelled) setErr(message)
       }
     })()
     return () => { cancelled = true }
