@@ -1,119 +1,144 @@
-'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useEntitlements } from '@/lib/hooks/useEntitlements'
-import ReferralCardView, { type Premium } from './ReferralCardView'
+// components/ReferralCard.tsx
+import { useMemo } from "react";
 
-const GOAL = 3
+type Props = {
+  referralUrl: string;
+  referredCount: number;   // 0..n
+  goal: number;            // e.g. 3
+  premium?: { active: boolean; expires_at?: string | null };
+  templateCredits?: number;
+  onCopy?: () => void;
+  onQuickShare?: () => void;
+  onShareLinkedIn?: () => void;
+  onShareEmail?: () => void;
+  onShareSMS?: () => void;
+  className?: string;
+};
 
-export default function ReferralCard() {
-  const [code, setCode] = useState<string>('')
-  const [count, setCount] = useState<number>(0)
+export default function ReferralCard({
+  referralUrl,
+  referredCount,
+  goal,
+  premium,
+  templateCredits = 0,
+  onCopy,
+  onQuickShare,
+  onShareLinkedIn,
+  onShareEmail,
+  onShareSMS,
+  className = "",
+}: Props) {
+  const clamped = Math.min(referredCount, goal);
+  const pct = useMemo(() => Math.round((clamped / Math.max(goal, 1)) * 100), [clamped, goal]);
 
-  // your existing hook
-  const { templateCredits, premiumExpiresAt } = useEntitlements()
-
-  // derive premium shape for the view
-  const premium: Premium = useMemo(() => {
-    if (!premiumExpiresAt) return { active: false, expires_at: null, days_left: null }
-    const exp = new Date(premiumExpiresAt)
-    const active = exp.getTime() > Date.now()
-    const days_left = Math.max(0, Math.ceil((exp.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    return { active, expires_at: exp.toISOString(), days_left }
-  }, [premiumExpiresAt])
-
-  // fetch code + progress (matches your original RPCs)
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelled) return
-
-      // 1) mint/fetch referrer code
-      const { data: codeRes, error: codeErr } = await supabase.rpc('create_or_get_referrer')
-      if (!codeErr) {
-        const c = (Array.isArray(codeRes) ? codeRes[0]?.code : (codeRes as any)?.code) ?? ''
-        if (!cancelled) setCode(c || '')
-      }
-
-      // 2) referral progress
-      const { data: progRes, error: progErr } = await supabase.rpc('referral_progress')
-      if (!progErr) {
-        const v =
-          (Array.isArray(progRes)
-            ? (progRes[0]?.referrals_signed_up ?? 0)
-            : (progRes as any)?.referrals_signed_up ?? 0)
-        if (!cancelled) setCount(Number(v) || 0)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
-  // build URL (origin-aware)
-  const siteUrl =
-    (typeof window !== 'undefined' && window.location?.origin) ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    'http://localhost:3000'
-  const referralUrl = code ? `${siteUrl}/r/${code}` : ''
-
-  // share helpers
-  const shareUrl = referralUrl
-    ? `${referralUrl}?utm_source=referral&utm_medium=share&utm_campaign=rb_ref`
-    : ''
-  const shareTitle = 'Resume Bender — nail your resume fast'
-  const shareText  = `I’m using Resume Bender to tailor my resume to job descriptions. Try it with my link: ${shareUrl}`
-
-  const onQuickShare = async () => {
-    if (!shareUrl) return
-    if (navigator.share) {
-      try { await navigator.share({ title: shareTitle, text: shareText, url: shareUrl }) } catch {}
-    } else {
-      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`, '_blank')
-    }
-  }
-  const onShareLinkedIn = () => {
-    if (!shareUrl) return
-    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`, '_blank')
-  }
-  const onShareEmail = () => {
-    if (!shareUrl) return
-    const subject = 'Try Resume Bender with my link'
-    const body = `Hey — I’m using Resume Bender to fix my resume.\n\nJoin with my link: ${shareUrl}\n\nIt aligns your resume to the JD and gives fast bullet suggestions.`
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  }
-  const onShareSMS = () => {
-    if (!shareUrl) return
-    const body = `Try Resume Bender → ${shareUrl}`
-    window.location.href = `sms:&body=${encodeURIComponent(body)}`
-  }
-  const onCopy = async () => {
-    if (!referralUrl) return
-    try { await navigator.clipboard.writeText(referralUrl) } catch {}
-  }
-
-  // keep layout stable while loading the code
-  if (!code) {
-    return (
-      <section className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-5 sm:p-6 shadow-sm">
-        <div className="h-5 w-40 rounded bg-neutral-200 dark:bg-neutral-800 animate-pulse" />
-        <div className="mt-4 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-900 animate-pulse" />
-        <div className="mt-4 h-2 rounded-full bg-neutral-200 dark:bg-neutral-800 animate-pulse" />
-      </section>
-    )
-  }
+  const expiresLabel = premium?.active && premium?.expires_at
+    ? new Date(premium.expires_at!).toLocaleDateString()
+    : "—";
 
   return (
-    <ReferralCardView
-      referralUrl={referralUrl}
-      referredCount={count}
-      goal={GOAL}
-      premium={premium}
-      templateCredits={templateCredits || 0}
-      onCopy={onCopy}
-      onQuickShare={onQuickShare}
-      onShareLinkedIn={onShareLinkedIn}
-      onShareEmail={onShareEmail}
-      onShareSMS={onShareSMS}
-    />
-  )
+    <section
+      className={[
+        "rounded-3xl border border-white/10 bg-white/5 backdrop-blur",
+        "p-5 md:p-7",
+        className,
+      ].join(" ")}
+      aria-label="Referral"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-white">
+          Invite friends, earn Premium
+        </h2>
+        <div
+          className="shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-medium text-white/80"
+          aria-label={`Progress ${clamped}/${goal}`}
+        >
+          {clamped}/{goal}
+        </div>
+      </div>
+
+      {/* Link + Copy */}
+      <div className="mt-4 flex gap-3">
+        <input
+          readOnly
+          value={referralUrl}
+          className="w-full rounded-xl border border-white/10 bg-white/8 px-3.5 py-2.5 text-sm text-white placeholder-white/50 outline-none focus:border-white/30"
+          placeholder="Your referral link"
+        />
+        <button
+          type="button"
+          onClick={onCopy}
+          className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-sm font-medium text-white hover:bg-white/15 active:bg-white/20"
+        >
+          Copy
+        </button>
+      </div>
+
+      {/* Progress */}
+      <div className="mt-4">
+        <div className="h-2 w-full rounded-full bg-white/15">
+          <div
+            className="h-2 rounded-full bg-indigo-500 transition-[width] duration-300"
+            style={{ width: `${pct}%` }}
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            role="progressbar"
+          />
+        </div>
+        <p className="mt-2 text-base md:text-sm text-white/80">
+          {Math.max(goal - clamped, 0)} more = 1-month Premium 🚀
+        </p>
+      </div>
+
+      {/* Info tiles */}
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-sm text-white/70">Template credits</div>
+          <div className="mt-1 text-2xl font-semibold text-white">{templateCredits}</div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-sm text-white/70">Premium</div>
+          <div className="mt-1 text-lg font-medium text-white/90">
+            {premium?.active ? `Active until ${expiresLabel}` : "Not active"}
+          </div>
+        </div>
+      </div>
+
+      {/* Share buttons */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <SmallBtn label="Quick Share" onClick={onQuickShare} />
+        <SmallBtn label="LinkedIn" onClick={onShareLinkedIn} />
+        <SmallBtn label="Email" onClick={onShareEmail} />
+        <SmallBtn label="SMS" onClick={onShareSMS} />
+      </div>
+    </section>
+  );
+}
+
+function SmallBtn({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "h-10 rounded-xl px-3.5 text-sm font-medium",
+        "border border-white/12 text-white",
+        disabled
+          ? "bg-white/5 text-white/40 cursor-not-allowed"
+          : "bg-white/10 hover:bg-white/15 active:bg-white/20",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
 }
