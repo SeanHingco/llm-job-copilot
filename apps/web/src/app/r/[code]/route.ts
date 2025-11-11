@@ -1,5 +1,4 @@
 // app/r/[code]/route.ts
-import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -8,14 +7,12 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! // server-only
 );
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Record<string, string | string[]> } // ✅ accepted by Vercel validator
-) {
+export async function GET(req: Request) {
   const url = new URL(req.url);
+  // pull the last path segment after /r/
+  const m = url.pathname.match(/\/r\/([^/]+)$/);
+  const code = m ? decodeURIComponent(m[1]).trim() : '';
 
-  const raw = context.params.code;
-  const code = decodeURIComponent(Array.isArray(raw) ? raw[0] ?? '' : raw).trim();
   if (!code) return NextResponse.redirect(new URL('/login', url));
 
   const { data: referrer } = await supabaseAdmin
