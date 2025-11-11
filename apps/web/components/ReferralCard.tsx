@@ -1,4 +1,3 @@
-// components/ReferralCard.tsx
 import { useMemo } from "react";
 
 type Props = {
