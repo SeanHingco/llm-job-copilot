@@ -13,6 +13,7 @@ from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .utils.security_headers import SecurityHeadersMiddleware
 from .auth import verify_supabase_session as verify_user
+from .routers import referral
 from .supabase_db import (upsert_user,
                             get_user_summary,
                             consume_free_use,
@@ -574,3 +575,5 @@ app.include_router(draft.router)
 app.include_router(resume.router)
 
 app.include_router(analytics.router)
+
+app.include_router(referral.router)

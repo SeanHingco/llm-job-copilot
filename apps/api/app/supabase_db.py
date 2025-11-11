@@ -255,3 +255,23 @@ async def insert_analytics_event(
         # optional: log error somewhere
         print("insert_analytics_event error:", r.status_code, r.text[:200])
         return False
+
+async def referrer_exists(code: str) -> bool:
+    params = {"code": f"eq.{code}", "select": "code", "limit": "1"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.get(f"{REST}/referrers", params=params, headers=HEADERS)
+        r.raise_for_status()
+        rows = r.json() or []
+        return bool(rows)
+
+async def insert_referral_click(*, code: str, click_id: str, ip: str, ua: str) -> None:
+    payload = [{
+        "code": code,
+        "click_id": click_id,
+        "ip": ip,
+        "ua": ua,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }]
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.post(f"{REST}/referrals", headers=HEADERS, json=payload)
+        r.raise_for_status()
