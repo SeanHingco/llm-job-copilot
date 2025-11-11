@@ -10,10 +10,12 @@ const supabaseAdmin = createClient(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { code: string } } // <-- inline type (no alias)
+  context: { params: Record<string, string | string[]> } // ✅ accepted by Vercel validator
 ) {
   const url = new URL(req.url);
-  const code = decodeURIComponent(params.code || '').trim();
+
+  const raw = context.params.code;
+  const code = decodeURIComponent(Array.isArray(raw) ? raw[0] ?? '' : raw).trim();
   if (!code) return NextResponse.redirect(new URL('/login', url));
 
   const { data: referrer } = await supabaseAdmin
