@@ -13,6 +13,7 @@ from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .utils.security_headers import SecurityHeadersMiddleware
 from .auth import verify_supabase_session as verify_user
+from .routers import referral
 from .supabase_db import (upsert_user,
                             get_user_summary,
                             consume_free_use,
@@ -22,7 +23,8 @@ from .supabase_db import (upsert_user,
                             get_user_id_by_customer,
                             insert_webhook_event_once,
                             insert_analytics_event,
-                            set_remaining_and_mark_refill)
+                            set_remaining_and_mark_refill,
+                            get_premium_override)
 
 
 
@@ -197,8 +199,10 @@ async def account_credits(user = Depends(verify_user)):
     uid = user["user_id"]
 
     snap = await get_user_summary(uid) or {}
-    unlimited = bool(snap.get("unlimited"))
+    db_unlimited = bool(snap.get("unlimited"))
     plan = (snap.get("plan") or "free").lower()
+    premium = await get_premium_override(uid)   # async, no supabase arg
+    unlimited = bool(db_unlimited or premium["active"])
 
     # Only do daily free top-up for non-unlimited Free users
     if not unlimited and plan == "free":
@@ -209,11 +213,17 @@ async def account_credits(user = Depends(verify_user)):
         "remaining_credits": int(snap.get("free_uses_remaining") or 0),
         "plan": plan,
         "unlimited": unlimited,
+        "premium": premium,
     }
 
 @app.post("/spend")
 async def spend(user = Depends(verify_user)):
-    snap = await get_user_summary(user["user_id"]) or {}
+    uid = user["user_id"]
+    snap = await get_user_summary(uid) or {}
+
+    premium = await get_premium_override(uid)
+    if premium["active"]:
+        return {"ok": True, "free_uses_remaining": int(snap.get("free_uses_remaining") or 0)}
 
     # 1) Primary: honor DB boolean
     if bool(snap.get("unlimited")):
@@ -565,3 +575,5 @@ app.include_router(draft.router)
 app.include_router(resume.router)
 
 app.include_router(analytics.router)
+
+app.include_router(referral.router)

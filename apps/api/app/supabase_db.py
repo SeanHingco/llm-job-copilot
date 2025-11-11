@@ -3,7 +3,7 @@ import os, httpx
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional, TypedDict
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
@@ -17,10 +17,46 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+class PremiumStatus(TypedDict):
+    active: bool
+    expires_at: Optional[str]
+    days_left: Optional[int]
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+async def _rest_get_latest_premium_entitlement(user_id: str) -> Optional[dict]:
+    """
+    GET /rest/v1/entitlements?user_id=eq.<uid>&kind=eq.premium&select=expires_at&order=expires_at.desc&limit=1
+    """
+    params = {
+        "user_id": f"eq.{user_id}",
+        "kind": "eq.premium",
+        "select": "expires_at",
+        "order": "expires_at.desc",
+        "limit": "1",
+    }
+    headers = {**HEADERS, "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.get(f"{REST}/entitlements", params=params, headers=headers)
+        r.raise_for_status()
+        rows = r.json() or []
+        return rows[0] if rows else None
+
+async def get_premium_override(user_id: str) -> PremiumStatus:
+    row = await _rest_get_latest_premium_entitlement(user_id)
+    if not row or not row.get("expires_at"):
+        return {"active": False, "expires_at": None, "days_left": None}
+    exp = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+    active = exp > now_utc()
+    days_left = max(0, (exp - now_utc()).days)
+    return {"active": bool(active), "expires_at": exp.isoformat(), "days_left": days_left}
+
+
 async def upsert_user(user_id: str, email: str|None=None, name: str|None=None) -> None:
     payload = {"id": user_id}
     if email and email.strip(): payload["email"] = email.strip()
-    if name and email.strip():  payload["full_name"] = name.strip()
+    if name and name.strip():  payload["full_name"] = name.strip()
     params  = {"on_conflict": "id"}
     headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
     async with httpx.AsyncClient(timeout=5) as client:
@@ -160,7 +196,7 @@ async def ensure_user_identity(user_id: str, email: str | None = None, name: str
         if email is not None:
             payload[0]["email"] = email
         if name is not None:
-            payload[0]["name"] = name
+            payload[0]["full_name"] = name
 
         headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
         async with httpx.AsyncClient(timeout=5) as client:
@@ -172,8 +208,8 @@ async def ensure_user_identity(user_id: str, email: str | None = None, name: str
     patch: Dict[str, Any] = {}
     if email and email != snap.get("email"):
         patch["email"] = email
-    if name and name != snap.get("name"):
-        patch["name"] = name
+    if name and name != snap.get("full_name"):
+        patch["full_name"] = name
 
     if patch:
         params  = {"id": f"eq.{user_id}"}
@@ -219,3 +255,23 @@ async def insert_analytics_event(
         # optional: log error somewhere
         print("insert_analytics_event error:", r.status_code, r.text[:200])
         return False
+
+async def referrer_exists(code: str) -> bool:
+    params = {"code": f"eq.{code}", "select": "code", "limit": "1"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.get(f"{REST}/referrers", params=params, headers=HEADERS)
+        r.raise_for_status()
+        rows = r.json() or []
+        return bool(rows)
+
+async def insert_referral_click(*, code: str, click_id: str, ip: str, ua: str) -> None:
+    payload = [{
+        "code": code,
+        "click_id": click_id,
+        "ip": ip,
+        "ua": ua,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }]
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.post(f"{REST}/referrals", headers=HEADERS, json=payload)
+        r.raise_for_status()

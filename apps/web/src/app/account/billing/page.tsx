@@ -216,6 +216,15 @@ export default function Billing() {
         Math.round((1 - perCredit20 / perCredit60) * 100)
     );
 
+    function premiumLabel(p: { days_left?: number; expires_at?: string } | null) {
+      if (!p) return null;
+      if (typeof p.days_left === 'number')
+        return `${Math.max(0, p.days_left)} day${p.days_left === 1 ? '' : 's'} left`;
+      if (p.expires_at)
+        return `Ends ${new Date(p.expires_at).toLocaleDateString()}`;
+      return null;
+    }
+
 
     // styling
     const statBase = 'rounded-lg border bg-slate-50 p-3';
@@ -451,11 +460,11 @@ export default function Billing() {
                                 ].join(' ')}>
                                 {(me?.plan ?? 'free')}
                                 </span>
-                                {Boolean(me?.unlimited) && (
+                                {/* {Boolean(me?.unlimited) && (
                                 <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
                                     Unlimited
                                 </span>
-                                )}
+                                )} */}
                                 {/* keep the subscription status chips as you have them */}
                             </div>
                         </div>

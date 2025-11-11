@@ -15,6 +15,7 @@ import PercentRing from "components/PercentRing";
 import TalkingPlaybookView from "components/TalkingPlaybookView";
 import AlignmentView from "components/AlignmentView";
 import CoverLetterView from "components/CoverLetterView";
+import FinalizeReferral from "components/FinalizeReferral";
 import { capture } from "@/lib/analytics";
 import Head from 'next/head';
 
@@ -119,6 +120,11 @@ export type AccountCreditsResponse = {
   remaining_credits: number;
   plan: 'free' | 'unlimited' | string;
   unlimited: boolean;
+  premium?: {
+    active: boolean;
+    expires_at?: string;   // ISO
+    days_left?: number;    // integer
+  };
 };
 export type SpendResponse = { ok: true; free_uses_remaining: number };
 export type CheckoutResponse = { url: string };
@@ -518,6 +524,7 @@ export default function DraftPage() {
     const [jobText, setJobText] = useState<string>("");
     const [showTut, setShowTut] = useState(false);
     const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
+    const [premium, setPremium] = useState<{active:boolean; expires_at?:string; days_left?:number} | null>(null);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -545,16 +552,30 @@ export default function DraftPage() {
     }, [])
 
     useEffect(() => {
+      let cancelled = false;
         (async () => {
-            const res = await apiFetch<AccountCreditsResponse>('/account/credits');
-            if (res.ok) {
-            const d = res.data!;
-            setCreditsCached(d.remaining_credits);
-            setIsUnlimited(Boolean(d.unlimited));
-            try { localStorage.setItem('rb:is_unlimited', String(Boolean(d.unlimited))); } catch {}
-            }
-        })();
-    }, []);
+        const res = await apiFetch<AccountCreditsResponse>('/account/credits')
+        if (!res.ok || cancelled) return
+        const d = res.data!
+        console.log("[credits]", d);
+
+        // cache credits
+        setCreditsCached(d.remaining_credits)
+
+        // SAFE premium guard (no undefined access)
+        const p = d.premium ?? { active: false as boolean, days_left: null as number | null, expires_at: null as string | null }
+        const premiumActive =
+          !!p.active ||
+          (typeof p.days_left === 'number' && p.days_left > 0) ||
+          (!!p.expires_at && Date.parse(p.expires_at) > Date.now())
+
+        setIsUnlimited(Boolean(d.unlimited || premiumActive))
+        setPremium(d.premium ?? null)
+
+        try { localStorage.setItem('rb:is_unlimited', String(Boolean(d.unlimited || premiumActive))) } catch {}
+      })()
+      return () => { cancelled = true }
+    }, [])
 
     useEffect(() => {
         try {
@@ -595,6 +616,9 @@ export default function DraftPage() {
         setCredits(n)
         try { if (typeof n === 'number') localStorage.setItem('rb:credits', String(n)); } catch {}
     }
+
+    const isPremium = Boolean(premium?.active);
+    
 
     // async function onExtract() {
     //     setError(""); setStatus(""); setProbablyScanned(false);
@@ -1033,12 +1057,22 @@ export default function DraftPage() {
         return null;
     }
 
+    function premiumLabel(p: { days_left?: number; expires_at?: string } | null) {
+      if (!p) return null;
+      if (typeof p.days_left === 'number')
+        return `${Math.max(0, p.days_left)} day${p.days_left === 1 ? '' : 's'} left`;
+      if (p.expires_at)
+        return `Ends ${new Date(p.expires_at).toLocaleDateString()}`;
+      return null;
+    }
+
 
     const outOfCredits = !isUnlimited && typeof credits === 'number' && credits <= 0;
     const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && (!outOfCredits || isUnlimited);
 
     return (
         <>
+        <FinalizeReferral />
         <Head>
             <title>Draft — AI Resume Builder & ATS Checks | Resume Bender</title>
             <meta
@@ -1055,6 +1089,11 @@ export default function DraftPage() {
 
                     <div className="ml-auto flex items-center gap-2">
                         <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
+                        {premium?.active && premiumLabel(premium) && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Premium · {premiumLabel(premium)}
+                          </span>
+                        )}
                         <button
                             type="button"
                             onClick={() => setShowTut(true)}

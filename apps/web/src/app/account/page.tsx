@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRequireAuth } from '@/lib/RequireAuth';
 import { supabase } from '@/lib/supabaseClient';
+import ReferralCardView from 'components/ReferralCardView';
 
 const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@resumebender.com";
 
@@ -39,6 +40,9 @@ export default function AccountPage() {
                         <div className="text-lg text-bold text-neutral-900 font-medium">Password</div>
                         <div className="text-sm text-neutral-600">Change your password</div>
                     </Link>
+                    <div className="sm:col-span-2">
+                        <ReferralCardView />
+                    </div>
                 </div>
 
                 <section className="mt-6 rounded-lg border bg-white p-4">
