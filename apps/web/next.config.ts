@@ -1,18 +1,18 @@
-/** @type {import('next').NextConfig} */
+// next.config.ts
+import type { NextConfig } from 'next';
+
 const API_ORIGIN =
   process.env.API_ORIGIN ||
   process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.VERCEL ? '' : 'http://localhost:8000'); // local dev fallback
+  (process.env.VERCEL ? '' : 'http://localhost:8000');
 
 if (!API_ORIGIN) {
   throw new Error('Missing API_ORIGIN/NEXT_PUBLIC_API_URL for rewrites.');
 }
 
-const CLEAN_ORIGIN = API_ORIGIN.replace(/\/+$/, ''); // remove trailing slash
+const CLEAN_ORIGIN = API_ORIGIN.replace(/\/+$/, '');
 
-console.log('[next.config] API_ORIGIN =', CLEAN_ORIGIN);
-
-export default {
+const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
@@ -22,3 +22,5 @@ export default {
     ];
   },
 };
+
+export default nextConfig;
