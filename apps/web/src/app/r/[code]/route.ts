@@ -1,13 +1,16 @@
-// app/r/[code]/route.ts
+// src/app/r/[code]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const API_ORIGIN = process.env.API_ORIGIN ?? process.env.NEXT_PUBLIC_API_URL;
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code: string }> }
 ) {
-  const code = (params?.code ?? "").trim();
+  // Next.js 15: params is a Promise
+  const { code: rawCode } = await params;
+
+  const code = (rawCode ?? "").trim();
   if (!code) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
@@ -18,14 +21,17 @@ export async function GET(
   }
 
   // Call FastAPI backend /r/{code}
-  const upstream = await fetch(`${API_ORIGIN}/r/${encodeURIComponent(code)}`, {
-    method: "GET",
-    redirect: "manual", // don't auto-follow redirects, we want to propagate them
-    headers: {
-      "x-forwarded-for": req.headers.get("x-forwarded-for") ?? "",
-      "user-agent": req.headers.get("user-agent") ?? "",
-    },
-  });
+  const upstream = await fetch(
+    `${API_ORIGIN}/r/${encodeURIComponent(code)}`,
+    {
+      method: "GET",
+      redirect: "manual", // don't auto-follow redirects, we want to propagate them
+      headers: {
+        "x-forwarded-for": req.headers.get("x-forwarded-for") ?? "",
+        "user-agent": req.headers.get("user-agent") ?? "",
+      },
+    }
+  );
 
   const location = upstream.headers.get("location");
   const status = upstream.status;
