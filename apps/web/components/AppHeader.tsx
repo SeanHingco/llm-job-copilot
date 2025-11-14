@@ -73,6 +73,7 @@ export default function AppHeader() {
             >
               <Link href="/draft" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Application Insights</Link>
               <Link href="/account" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Account</Link>
+              <Link href="/blog" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Blog</Link>
               <div className="my-1 h-px bg-black/10" />
               <div className="px-1 py-1">
                 <SignOutButton className="w-full justify-center" />
@@ -84,6 +85,7 @@ export default function AppHeader() {
         <div className="hidden md:flex items-center gap-2">
           {link('/draft', 'Application Insights', pathname)}
           {link('/account', 'Account', pathname)}
+          {link('/blog', 'Blog', pathname)}
           {/* {link('/legal/privacy', 'Privacy', pathname)}
           {link('/legal/terms', 'Terms', pathname)} */}
           {/* {link('/account/billing', 'Billing', pathname)}
