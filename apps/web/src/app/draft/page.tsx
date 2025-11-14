@@ -1,5 +1,6 @@
 "use client"
 import {useState, useEffect} from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from '@/lib/api';
 import CreditBadge from 'components/CreditBadge'
 // import SignOutButton from "components/SignOutButton";
@@ -499,6 +500,7 @@ function hasKey<K extends string>(
 
 export default function DraftPage() {
     // initialize states
+    const router = useRouter();
     const[url, setUrl] = useState<string>("");
     const[q, setQ] = useState<string>("");
     const[jobTitle, setJobTitle] = useState<string>("");
@@ -525,6 +527,7 @@ export default function DraftPage() {
     const [showTut, setShowTut] = useState(false);
     const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
     const [premium, setPremium] = useState<{active:boolean; expires_at?:string; days_left?:number} | null>(null);
+    const [showReferralPrompt, setShowReferralPrompt] = useState(false);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -692,6 +695,24 @@ export default function DraftPage() {
     //     }
     // }
 
+    function maybeShowReferralNudge() {
+      try {
+        // const firstDone = localStorage.getItem("rb:first_task_done");
+        // const nudgeSeen = localStorage.getItem("rb:referral_nudge_seen");
+
+        // // Only trigger the very first time they ever complete a task
+        // if (!firstDone) {
+        //   localStorage.setItem("rb:first_task_done", "1");
+        //   if (!nudgeSeen) {
+        //     setShowReferralPrompt(true);
+        //   }
+        // }
+        setShowReferralPrompt(true);
+      } catch {
+        // if localStorage explodes, just silently skip
+      }
+    }
+
     async function onGenerateAll() {
         capture("task_run_clicked", { tasks: selectedTasks });
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
@@ -786,6 +807,7 @@ export default function DraftPage() {
 
                     setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
                     setPhase(taskToRun, "done");
+                    maybeShowReferralNudge();
             }
         } catch (e: unknown) {
             setGenError(errToString(e));
@@ -1083,6 +1105,39 @@ export default function DraftPage() {
         </Head>
         <main className="p-4 md:p-8 space-y-4">
             <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
+            {showReferralPrompt && (
+              <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 mb-4">
+                <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-semibold">Nice work — your draft is ready 🎉</div>
+                    <p className="mt-1 text-sm text-indigo-900/90">
+                      Want free credits? Set up your referral link on your Account page and earn rewards when friends sign up.
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReferralPrompt(false);
+                      }}
+                      className="rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100"
+                    >
+                      Maybe later
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReferralPrompt(false);
+                        router.push("/account#referrals");
+                      }}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                    >
+                      Go to referrals
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4">
                 <div className="mb-3 flex items-center">
                     <h1 className="text-2xl font-bold">Resume Bender</h1>

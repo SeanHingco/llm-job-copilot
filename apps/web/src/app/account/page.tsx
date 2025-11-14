@@ -40,7 +40,7 @@ export default function AccountPage() {
                         <div className="text-lg text-bold text-neutral-900 font-medium">Password</div>
                         <div className="text-sm text-neutral-600">Change your password</div>
                     </Link>
-                    <div className="sm:col-span-2">
+                    <div id="referrals" className="sm:col-span-2">
                         <ReferralCardView />
                     </div>
                 </div>
