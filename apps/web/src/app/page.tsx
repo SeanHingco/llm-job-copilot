@@ -77,7 +77,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pt-24 pb-16">
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-          Stop getting rejected by resumes that don’t match the job.
+          Stop getting rejected with resumes that don’t match the job.
         </h1>
         <p className="mt-4 max-w-2xl text-neutral-200 text-base md:text-lg leading-relaxed">
          Resume Bender analyzes the posting, rewrites your bullets, and shows you exactly why recruiters would say yes or no.
