@@ -80,7 +80,7 @@ export default function HomePage() {
           Stop getting rejected with resumes that don’t match the job.
         </h1>
         <p className="mt-4 max-w-2xl text-neutral-200 text-base md:text-lg leading-relaxed">
-         Resume Bender analyzes the posting, rewrites your bullets, and shows you exactly why recruiters would say yes or no.
+         Resume Bender is your AI assistant that analyzes the posting, rewrites your bullets, and shows you exactly why recruiters would say yes or no.
         </p>
 
         <div className="mt-8">
