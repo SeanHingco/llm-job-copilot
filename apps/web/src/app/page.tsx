@@ -115,13 +115,13 @@ export default function HomePage() {
 
               <a
                 href="/login"
-                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-amber-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-amber-500"
               >
-                Try it free
+                Fix My Resume Now For Free
               </a>
 
-              <p className="mt-3 text-xs text-neutral-400 text-center md:text-left">
-                Scan your current resume. No credit card required.
+              <p className="mt-3 text-s text-neutral-400 text-center md:text-left">
+                Limited launch access. No credit card required.
               </p>
             </div>
           </aside>
