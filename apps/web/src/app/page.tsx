@@ -64,27 +64,67 @@ export default function HomePage() {
             <a href="/login" className="text-sm text-neutral-300 hover:text-white">
               Login
             </a>
-            <a
+            {/* <a
               href="/login"
               className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500"
             >
               Try it free
-            </a>
+            </a> */}
           </div>
         </nav>
       </header>
 
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pt-24 pb-16">
-        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-          Stop getting rejected with resumes that don’t match the job.
-        </h1>
-        <p className="mt-4 max-w-2xl text-neutral-200 text-base md:text-lg leading-relaxed">
-         Resume Bender analyzes the posting, rewrites your bullets, and shows you exactly why recruiters would say yes or no.
-        </p>
+        <div className="md:flex md:items-start md:justify-between md:gap-10">
+          {/* Left side */}
+          <div className="md:max-w-xl">
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+              Stop getting rejected with resumes that don’t match the job.
+            </h1>
+            <p className="mt-4 max-w-2xl text-neutral-200 text-base md:text-lg leading-relaxed">
+            Resume Bender is your AI assistant that analyzes the posting, rewrites your bullets, and shows you exactly why recruiters would say yes or no.
+            </p>
 
-        <div className="mt-8">
-          <CTAButtons />
+            <div className="mt-8">
+              <CTAButtons />
+            </div>
+          </div>
+
+          {/* Right side: offer box */}
+          <aside className="mt-8 md:mt-0 md:w-80">
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 md:p-6 text-sm">
+              <h3 className="text-sm font-semibold text-neutral-50">
+                Everything you get instantly
+              </h3>
+
+              <ul className="mt-4 space-y-2 text-neutral-200">
+                <li className="flex gap-2">
+                  <span className="mt-0.5 text-xs">✔</span>
+                  <span>60-second resume scan</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-0.5 text-xs">✔</span>
+                  <span>Match score + missing keywords</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-0.5 text-xs">✔</span>
+                  <span>Auto-rewritten bullet points</span>
+                </li>
+              </ul>
+
+              <a
+                href="/login"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Try it free
+              </a>
+
+              <p className="mt-3 text-xs text-neutral-400 text-center md:text-left">
+                Scan your current resume. No credit card required.
+              </p>
+            </div>
+          </aside>
         </div>
       </section>
 
