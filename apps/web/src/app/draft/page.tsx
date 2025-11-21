@@ -1349,7 +1349,7 @@ export default function DraftPage() {
                         return (
                             <section key={t}>
                             <h2 className="text-lg font-bold mb-2">{title}</h2>
-                            {r?.raw && (
+                            {/* {r?.raw && (
                             <details className="mt-2">
                                 <summary className="cursor-pointer text-sm text-neutral-600 hover:underline">
                                 Show raw model output
@@ -1358,7 +1358,7 @@ export default function DraftPage() {
                                 {r.raw}
                                 </pre>
                             </details>
-                            )}
+                            )} */}
                             {t === "bullets" ? (
                                 (() => {
                                     const j = r?.json;
