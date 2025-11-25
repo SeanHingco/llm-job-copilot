@@ -4,6 +4,8 @@ import { apiFetch } from '@/lib/api';
 import { useRequireAuth } from '@/lib/RequireAuth';
 import Link from 'next/link';
 
+const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
+
 type PackKey = 'pack_20' | 'pack_60' | 'pack_200';
 type SubKey  = 'sub_unlimited_monthly' | 'sub_unlimited_quarterly' | 'sub_unlimited_yearly';
 
@@ -414,6 +416,23 @@ export default function Billing() {
             setError(`Error: ${msg || String(e)}`);
             setManaging(false);
         }
+    }
+
+    if (FREE_MODE) {
+      return (
+        <div className="max-w-3xl mx-auto p-8 px-4 space-y-4">
+          <h1 className="text-2xl font-bold">Billing</h1>
+          <div className="mb-4">
+                <Link href="/account" className="text-sm text-neutral-400 hover:underline">
+                    ← Back to account
+                </Link>
+          </div>
+          <p className="mt-2 text-sm text-neutral-600">
+            During our launch period, Resume Bender is free to use.
+            Billing and subscriptions are temporarily disabled and will return later.
+          </p>
+        </div>
+      );
     }
 
     return (
