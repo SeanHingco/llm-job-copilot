@@ -11,6 +11,7 @@ from app.utils.jd_fetch import fetch_jd_text
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
 from app.routers.resume import extract_resume as extract_route
+from app.agents.bender_score import run_bender_score_agent
 
 from app.auth import verify_supabase_session as verify_user
 from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event
@@ -23,10 +24,10 @@ import re
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
-Task = Literal["bullets", "talking_points", "cover_letter", "alignment"]
+Task = Literal["bullets", "talking_points", "cover_letter", "alignment", "bender_score"]
 PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
-REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment"}
+REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment", "bender_score"}
 FREE_MODE = os.getenv("FREE_MODE", "true").lower() == "true"
 
 NEG_PATTERNS = [
@@ -150,6 +151,45 @@ async def _run_generation(req: DraftReq) -> dict:
                     "message": "We couldn't fetch a valid job description. Paste the JD or try a different URL."
                 },
             )
+    
+    if req.task == "bender_score":
+        # Use pasted job_text if available; otherwise fall back to context from ingest
+        job_text = (req.job_text or "").strip() or context
+        resume_text = (req.resume or "").strip()
+
+        if not resume_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read your resume. Paste text or upload a file.",
+            )
+        if not job_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide a job URL or paste the job description to compute Bender Score.",
+            )
+
+        # Run the LangChain agent
+        bender = run_bender_score_agent(resume_text=resume_text, job_text=job_text)
+
+        # Return in your normal /draft/run-form shape
+        # (output_json will be rendered as pretty JSON on the Draft page)
+        return {
+            "output_json": {
+                "ats_alignment": bender.ats_alignment,
+                "experience_fit": bender.experience_fit,
+                "car_quality": bender.car_quality,
+                "resume_clarity": bender.resume_clarity,
+                "company_competitiveness": bender.company_competitiveness,
+                "risk_adjustment": bender.risk_adjustment,
+                "final_bender_score": bender.final_bender_score,
+                "explanation": bender.explanation,
+            },
+            "prompt": "",  # optional: you can return the prompt if you want to debug
+            "meta": {
+                "task": "bender_score",
+                "final_url": result.get("final_url"),
+            },
+        }
 
 
     template = load_task_template(req.task)
