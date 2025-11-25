@@ -20,7 +20,7 @@ import FinalizeReferral from "components/FinalizeReferral";
 import { capture } from "@/lib/analytics";
 import Head from 'next/head';
 
-
+const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
 
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
@@ -724,11 +724,11 @@ export default function DraftPage() {
         }
         if (selectedTasks.length === 0) { setGenError("Select at least one task."); return; }
 
-        if (!isUnlimited && typeof credits === 'number' && credits <= 0) {
-            const msg = "You’re out of credits. Upgrade to continue.";
-            setUpgradeMsg(msg);
-            setGenError(msg);
-            return;
+        if (!FREE_MODE && !isUnlimited && typeof credits === 'number' && credits <= 0) {
+          const msg = "You’re out of credits. Upgrade to continue.";
+          setUpgradeMsg(msg);
+          setGenError(msg);
+          return;
         }
 
         setUpgradeMsg(null);
@@ -1089,8 +1089,13 @@ export default function DraftPage() {
     }
 
 
-    const outOfCredits = !isUnlimited && typeof credits === 'number' && credits <= 0;
-    const canSubmit = (!!url || jobText.trim().length > 0) && !isGenerating && (!outOfCredits || isUnlimited);
+    const outOfCredits =
+      !FREE_MODE && !isUnlimited && typeof credits === 'number' && credits <= 0;
+
+    const canSubmit =
+      (!!url || jobText.trim().length > 0) &&
+      !isGenerating &&
+      (!outOfCredits || isUnlimited || FREE_MODE);
 
     return (
         <>
@@ -1317,26 +1322,30 @@ export default function DraftPage() {
                     </div>
                 )}
                 {status && <p>{status}</p>}
-                {!isUnlimited && typeof credits === 'number' && credits <= 0 && !upgradeMsg && (
+                {!FREE_MODE &&
+                  !isUnlimited &&
+                  typeof credits === 'number' &&
+                  credits <= 0 &&
+                  !upgradeMsg && (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        You’re out of credits. <a className="underline" href="/account/billing">Upgrade</a> to continue.
+                      You’re out of credits. <a className="underline" href="/account/billing">Upgrade</a> to continue.
                     </div>
                 )}
 
-                {upgradeMsg && (
-                    <div
-                        role="status"
-                        aria-live="polite"
-                        className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-sm flex items-center justify-between gap-3"
+                {!FREE_MODE && upgradeMsg && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-sm flex items-center justify-between gap-3"
+                  >
+                    <span>{asText(upgradeMsg)}</span>
+                    <a
+                      href="/account/billing"
+                      className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
                     >
-                        <span>{asText(upgradeMsg)}</span>
-                        <a
-                        href="/account/billing"
-                        className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
-                        >
-                        Upgrade
-                        </a>
-                    </div>
+                      Upgrade
+                    </a>
+                  </div>
                 )}
                 {Object.keys(results).length > 0 && (
                     <div className="mt-6 space-y-6">

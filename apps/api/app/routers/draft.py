@@ -27,6 +27,7 @@ Task = Literal["bullets", "talking_points", "cover_letter", "alignment"]
 PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
 REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment"}
+FREE_MODE = os.getenv("FREE_MODE", "true").lower() == "true"
 
 NEG_PATTERNS = [
     "job not found", "position closed", "no longer available", "this job has expired",
@@ -289,17 +290,28 @@ async def draft(req: DraftReq):
     }
 
 @router.post("/run")
-async def draft_run(req: DraftReq, _creds: HTTPAuthorizationCredentials = Security(bearer), user = Depends(verify_user)):
-    # check if user has free uses
-    profile: UserSummary = await get_user_summary(user["user_id"])
-    credits = int(profile["free_uses_remaining"])
+async def draft_run(
+    req: DraftReq,
+    _creds: HTTPAuthorizationCredentials = Security(bearer),
+    user = Depends(verify_user),
+):
+    user_id = user["user_id"]
 
-    if credits <= 0:
-        raise HTTPException(status_code=402, detail={
-            "code": "INSUFFICIENT_CREDITS",
-            "message": "You are out of credits.",
-            "current_credits": credits
-        })
+    # If we're NOT in free mode, enforce credits like before
+    credits = None
+    if not FREE_MODE:
+        profile: UserSummary = await get_user_summary(user_id)
+        credits = int(profile.get("free_uses_remaining") or 0)
+
+        if credits <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "message": "You are out of credits.",
+                    "current_credits": credits,
+                },
+            )
 
     # call model via provider-agnostic helper
     try:
@@ -308,18 +320,31 @@ async def draft_run(req: DraftReq, _creds: HTTPAuthorizationCredentials = Securi
         # generate_text raises RuntimeError with helpful details; surface them
         raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
 
-    remaining = await consume_free_use(user["user_id"])
-    if remaining < 0:
-        # race: someone else spent the last credit in parallel
-        raise HTTPException(
-            status_code=402,
-            detail={"code": "INSUFFICIENT_CREDITS",
+    # After generation, either spend a credit (normal) or skip (free mode)
+    if not FREE_MODE:
+        remaining = await consume_free_use(user_id)
+        if remaining < 0:
+            # race: someone else spent the last credit in parallel
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
                     "message": "You are out of credits.",
-                    "current_credits": credits},
+                    "current_credits": credits,
+                },
+            )
+
+        data["meta"]["remaining_credits"] = remaining
+    else:
+        # In free mode, keep meta shape but don't enforce / decrement credits
+        data.setdefault("meta", {})
+        # you can set any sentinel here; we'll make the UI ignore it later
+        data["meta"]["remaining_credits"] = data["meta"].get(
+            "remaining_credits", 9999
         )
 
-    data["meta"]["remaining_credits"] = remaining
     return data
+
 
 @router.post("/run-form")
 async def draft_run_form(
@@ -339,37 +364,50 @@ async def draft_run_form(
     # 0) Rate limit FIRST (burst + sustained), per user+task
     ok, retry = throttle_multi(f"user:{user_id}:task:{task}")
     if not ok:
-        await _log_event_safe(request,
-                              user_id=user["user_id"],
-                              name="rate_limited",
-                              props={"endpoint": "draft/run-form", "task": task, "retry_after": retry})
+        await _log_event_safe(
+            request,
+            user_id=user["user_id"],
+            name="rate_limited",
+            props={
+                "endpoint": "draft/run-form",
+                "task": task,
+                "retry_after": retry
+            },
+        )
         raise HTTPException(
             status_code=429,
             detail="Rate limit reached. Please try again shortly.",
             headers={"Retry-After": str(retry)},
         )
 
-    # 1) Load profile ONCE
-    profile: UserSummary = await get_user_summary(user_id)
-    is_unlimited = bool(profile.get("unlimited"))
-    credits = int(profile.get("free_uses_remaining") or 0)
+    # 1) Load profile / credits ONLY when not in FREE_MODE
+    # ----------------------------------------------------
+    is_unlimited = False          # NEW: default values so they're always defined
+    credits = 0                   # NEW
 
-    # 2) If not unlimited, apply lazy daily top-up and recheck credits
-    if not is_unlimited:
-        credits = await ensure_daily_free_topup(user_id)
-        if credits <= 0:
-            await _log_event_safe(request,
-                              user_id=user["user_id"],
-                              name="out_of_credits_shown",
-                              props={"endpoint": "draft/run-form"})
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "code": "INSUFFICIENT_CREDITS",
-                    "message": "You are out of credits.",
-                    "current_credits": credits,
-                },
-            )
+    if not FREE_MODE:             # NEW: skip all this in free mode
+        profile: UserSummary = await get_user_summary(user_id)
+        is_unlimited = bool(profile.get("unlimited"))
+        credits = int(profile.get("free_uses_remaining") or 0)
+
+        # 2) If not unlimited, apply lazy daily top-up and recheck credits
+        if not is_unlimited:
+            credits = await ensure_daily_free_topup(user_id)
+            if credits <= 0:
+                await _log_event_safe(
+                    request,
+                    user_id=user["user_id"],
+                    name="out_of_credits_shown",
+                    props={"endpoint": "draft/run-form"},
+                )
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "code": "INSUFFICIENT_CREDITS",
+                        "message": "You are out of credits.",
+                        "current_credits": credits,
+                    },
+                )
 
     # 3) Extract resume text if a file was uploaded
     text_from_form = (resume or "").strip()
@@ -384,13 +422,13 @@ async def draft_run_form(
     if not resume_text:
         raise HTTPException(
             status_code=400,
-            detail="Could not read your resume. Paste text or upload a file."
+            detail="Could not read your resume. Paste text or upload a file.",
         )
-    
+
     if not _is_readable(resume_text):
         raise HTTPException(
             status_code=400,
-            detail="Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text."
+            detail="Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text.",
         )
 
     if not (job_text and job_text.strip()) and not (url and url.strip()):
@@ -401,10 +439,12 @@ async def draft_run_form(
     url_for_req: Optional[str] = url if not (job_text and job_text.strip()) else None
 
     start = time.monotonic()
-    await _log_event_safe(request,
-                          user_id=user["user_id"],
-                          name="task_run_started",
-                          props={"task": task, "unlimited": bool(is_unlimited)})
+    await _log_event_safe(
+        request,
+        user_id=user["user_id"],
+        name="task_run_started",
+        props={"task": task, "unlimited": bool(is_unlimited)},
+    )
 
     # 5) Build request
     req = DraftReq(
@@ -422,27 +462,48 @@ async def draft_run_form(
         data = await _run_generation(req)
     except HTTPException as e:
         if e.status_code not in (402, 429):
-            await _log_event_safe(request,
-                                  user_id=user["user_id"],
-                                  name="task_run_failed",
-                                  props={"task": task, "status": e.status_code})
+            await _log_event_safe(
+                request,
+                user_id=user["user_id"],
+                name="task_run_failed",
+                props={"task": task, "status": e.status_code},
+            )
         raise
     except Exception as e:
-        await _log_event_safe(request,
-                              user_id=user["user_id"],
-                              name="task_run_failed",
-                              props={"task": task, "status": 500, "error": str(e)[:200]})
+        await _log_event_safe(
+            request,
+            user_id=user["user_id"],
+            name="task_run_failed",
+            props={"task": task, "status": 500, "error": str(e)[:200]},
+        )
         raise
 
     duration_ms = int((time.monotonic() - start) * 1000)
-    credits_spent = 0 if is_unlimited else 1
+    # CHANGED: in free mode, treat as 0 credits spent for analytics
+    if FREE_MODE or is_unlimited:                 # NEW
+        credits_spent = 0
+    else:
+        credits_spent = 1
 
-    await _log_event_safe(request,
-                          user_id=user["user_id"],
-                          name="task_run_completed",
-                          props={"task": task, "duration_ms": duration_ms, "credits_spent": credits_spent})
+    await _log_event_safe(
+        request,
+        user_id=user["user_id"],
+        name="task_run_completed",
+        props={"task": task, "duration_ms": duration_ms, "credits_spent": credits_spent},
+    )
 
-    # 7) Return meta, spending credits only for non-unlimited
+    # 7) Return meta, spending credits only when NOT in FREE_MODE
+    # ----------------------------------------------------------
+    # Make sure meta exists so we can safely write into it
+    data.setdefault("meta", {})                   # NEW
+
+    if FREE_MODE:
+        # NEW: Free mode → don't decrement at all, just return a dummy large value
+        data["meta"]["remaining_credits"] = data["meta"].get("remaining_credits", 9999)
+        data["meta"]["unlimited"] = bool(is_unlimited)
+        return data
+
+    # Original behavior for paid mode (non-free)
     if is_unlimited:
         data["meta"]["remaining_credits"] = credits  # unchanged
         data["meta"]["unlimited"] = True
@@ -462,6 +523,7 @@ async def draft_run_form(
 
     data["meta"]["remaining_credits"] = remaining
     return data
+
 
     
 

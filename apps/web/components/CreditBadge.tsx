@@ -1,5 +1,7 @@
 import React from 'react'
 
+const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true'
+
 type CreditProps = {
   value?: number
   loading?: boolean
@@ -7,6 +9,16 @@ type CreditProps = {
 }
 
 export default function CreditBadge({ value, loading, unlimited=false }: CreditProps) {
+  if (FREE_MODE) {
+    return (
+      <div
+        className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm"
+        aria-live="polite"
+      >
+        <span className="font-medium">Free during launch</span>
+      </div>
+    )
+  }
   const display = unlimited
     ? '∞'
     : (typeof value === 'number' ? value : '—')

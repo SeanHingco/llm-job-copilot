@@ -30,6 +30,9 @@ export default function ReferralCard({
   const clamped = Math.min(referredCount, goal);
   const pct = useMemo(() => Math.round((clamped / Math.max(goal, 1)) * 100), [clamped, goal]);
 
+  const hasUnlocked = referredCount >= goal;
+  const remaining = Math.max(0, goal - referredCount);
+
   const expiresLabel = premium?.active && premium?.expires_at
     ? new Date(premium.expires_at!).toLocaleDateString()
     : "—";
@@ -45,9 +48,18 @@ export default function ReferralCard({
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-white">
-          Invite friends, earn Premium
-        </h2>
+        <div className="flex flex-col gap-1">
+          <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-white">
+            Like Resume Bender? Invite friends, become an Early Contributor!
+          </h2>
+
+          {hasUnlocked && (
+            <span className="inline-flex items-center rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-medium text-emerald-100 border border-emerald-300/40">
+              Early Contributor
+            </span>
+          )}
+        </div>
+
         <div
           className="shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-medium text-white/80"
           aria-label={`Progress ${clamped}/${goal}`}
@@ -86,7 +98,9 @@ export default function ReferralCard({
           />
         </div>
         <p className="mt-2 text-base md:text-sm text-white/80">
-          {Math.max(goal - clamped, 0)} more = 1-month Premium 🚀
+          {hasUnlocked
+            ? "You’ve unlocked the Early Contributor badge. Thanks for supporting Resume Bender early ❤️"
+            : `${remaining} more = Early Contributor badge`}
         </p>
       </div>
 
