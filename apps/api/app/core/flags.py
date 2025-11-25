@@ -1,5 +1,5 @@
 from fastapi import Request
-from settings import settings
+from .settings import settings
 
 def use_agentic(request: Request) -> bool:
     # Request-level override:
