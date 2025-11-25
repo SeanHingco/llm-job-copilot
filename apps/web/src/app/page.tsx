@@ -200,6 +200,10 @@ export default function HomePage() {
               className="rounded-xl border border-neutral-800 w-full"
             />
           </div>
+
+          <div className="mt-8">
+              <CTAButtons enable_try_now={false}/>
+          </div>
         </div>
 
         <p className="mt-6 text-xs text-neutral-500 text-center md:text-left">
@@ -239,6 +243,10 @@ export default function HomePage() {
         <p className="mt-8 text-xs text-neutral-400">
           We don’t sell your data. You control what’s stored and can delete it anytime.
         </p>
+
+        <div className="mt-8">
+          <CTAButtons enable_try_now={false}/>
+        </div>
       </section>
 
       <script

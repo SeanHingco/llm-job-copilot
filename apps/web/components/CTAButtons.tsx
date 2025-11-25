@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function CTAButtons() {
+interface CTAButtonsProps {
+  enable_try_now?: boolean;
+};
+
+export default function CTAButtons({enable_try_now = true}: CTAButtonsProps) {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
 
@@ -30,12 +34,14 @@ export default function CTAButtons() {
       >
         Try it now
       </button>
-      <a
-        href="#how-it-works"
-        className="inline-flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-neutral-800"
-      >
-        How it works
-      </a>
+      {enable_try_now && (
+        <a
+          href="#how-it-works"
+          className="inline-flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-neutral-800"
+        >
+          How it works
+        </a>
+      )}
     </div>
   );
 }
