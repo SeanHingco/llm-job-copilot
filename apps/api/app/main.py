@@ -46,6 +46,8 @@ VERCEL_PREVIEW_REGEX = r"^https://[a-z0-9-]+-git-[a-z0-9-]+-[a-z0-9-]+\.vercel\.
 STARTER_ALLOWANCE = int(os.getenv("MONTHLY_CREDITS_STARTER", "50"))
 DAILY_FREE_CREDITS = int(os.getenv("DAILY_FREE_CREDITS", "6"))
 
+FREE_MODE = os.getenv("FREE_MODE", "true").lower() == "true"
+
 print("CORS allow_origins =", ALLOWED_ORIGINS)
 
 # helpers
@@ -219,6 +221,17 @@ async def account_credits(user = Depends(verify_user)):
 @app.post("/spend")
 async def spend(user = Depends(verify_user)):
     uid = user["user_id"]
+
+    # FREE MODE: skip all credit checks + decrements
+    if FREE_MODE:
+        # return a harmless structure to match original shape
+        snap = await get_user_summary(uid) or {}
+        return {
+            "ok": True,
+            "free_uses_remaining": snap.get("free_uses_remaining", 9999)
+        }
+
+    # NORMAL MODE (original behavior)
     snap = await get_user_summary(uid) or {}
 
     premium = await get_premium_override(uid)
@@ -238,6 +251,7 @@ async def spend(user = Depends(verify_user)):
     remaining = await consume_free_use(user["user_id"])
     if remaining < 0:
         raise HTTPException(status_code=402, detail="Out of free uses")
+
     return {"ok": True, "free_uses_remaining": remaining}
 
 @app.post("/billing/checkout")
