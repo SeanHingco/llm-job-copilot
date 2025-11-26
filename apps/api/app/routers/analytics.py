@@ -30,7 +30,10 @@ class CaptureBody(BaseModel):
 async def capture_event(body: CaptureBody, request: Request, user = Depends(optional_supabase_session)):
     client_event_id = str(body.client_event_id or uuid4())
     user_id = (user or {}).get("user_id")
-    ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+    raw_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+    ip = None
+    if raw_ip:
+        ip = raw_ip.split(",")[0].strip()
     ua = request.headers.get("user-agent")
 
     anon_id = body.anon_id or f"server-{uuid4()}"
@@ -43,7 +46,7 @@ async def capture_event(body: CaptureBody, request: Request, user = Depends(opti
             name=body.name,
             props=body.props,
             user_id=user_id,
-            anon_id=body.anon_id,
+            anon_id=anon_id,
             path=body.path,
             ip=ip,
             ua=ua,
