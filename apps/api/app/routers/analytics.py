@@ -33,11 +33,13 @@ async def capture_event(body: CaptureBody, request: Request, user = Depends(opti
     ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
     ua = request.headers.get("user-agent")
 
+    anon_id = body.anon_id or f"server-{uuid4()}"
+
     ok = await supabase_db.insert_analytics_event(
         name=body.name,
         props=body.props,
         user_id=user_id,
-        anon_id=body.anon_id,
+        anon_id=anon_id,
         path=body.path,
         ip=ip,
         ua=ua,
