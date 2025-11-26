@@ -202,7 +202,7 @@ export default function HomePage() {
           </div>
 
           <div className="mt-8">
-              <CTAButtons enable_try_now={false}/>
+              <CTAButtons enable_how={false}/>
           </div>
         </div>
 
@@ -245,7 +245,7 @@ export default function HomePage() {
         </p>
 
         <div className="mt-8">
-          <CTAButtons enable_try_now={false}/>
+          <CTAButtons enable_how={false}/>
         </div>
       </section>
 
