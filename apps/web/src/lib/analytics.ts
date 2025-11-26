@@ -38,5 +38,7 @@ export async function capture(name: string, props: Record<string, unknown> = {})
     console.log("[capture] sent", body, "got", res.status, res.data);
   }
 
+  console.log("[capture] sent", body, "got", res.status, res.data);
+
   return res.data;
 }
