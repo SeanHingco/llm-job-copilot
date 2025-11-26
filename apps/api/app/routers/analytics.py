@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, Security
+from fastapi import APIRouter, Request, Depends, Security, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from uuid import UUID, uuid4
@@ -35,14 +35,24 @@ async def capture_event(body: CaptureBody, request: Request, user = Depends(opti
 
     anon_id = body.anon_id or f"server-{uuid4()}"
 
-    ok = await supabase_db.insert_analytics_event(
-        name=body.name,
-        props=body.props,
-        user_id=user_id,
-        anon_id=anon_id,
-        path=body.path,
-        ip=ip,
-        ua=ua,
-        client_event_id=client_event_id,
-    )
+    print("[analytics.capture] incoming body:", body.dict())
+    print("[analytics.capture] user_id:", user_id, "ip:", ip)
+
+    try:
+        ok = await supabase_db.insert_analytics_event(
+            name=body.name,
+            props=body.props,
+            user_id=user_id,
+            anon_id=body.anon_id,
+            path=body.path,
+            ip=ip,
+            ua=ua,
+            client_event_id=client_event_id,
+        )
+        print("[analytics.capture] insert returned:", ok)
+    except Exception as e:
+        # This will show in your server logs and in the HTTP response during debugging
+        print("[analytics.capture] insert ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=f"insert_analytics_event error: {e!r}")
+
     return {"ok": ok}
