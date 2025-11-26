@@ -24,22 +24,13 @@ export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
   }, []);
 
   function onPrimaryClick() {
-    console.log("[CTA] primary clicked; authed =", authed);
+    void capture("cta_click", {
+      cta_id: "landing_try_now",
+      destination: authed ? "/draft" : "/login",
+      location: "landing_hero_cta",
+    });
 
-    void (async () => {
-      try {
-        const res = await capture("cta_click", {
-          cta_id: "landing_try_now",
-          destination: authed ? "/draft" : "/login",
-          location: "landing_hero_cta",
-        });
-        console.log("[CTA] capture result:", res);
-      } catch (err) {
-        console.error("[CTA] capture error:", err);
-      } finally {
-        router.push(authed ? "/draft" : "/login");
-      }
-    })();
+    router.push(authed ? "/draft" : "/login");
   }
 
   return (

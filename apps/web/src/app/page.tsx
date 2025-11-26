@@ -1,5 +1,6 @@
 // app/page.tsx
 import CTAButtons from "components/CTAButtons";
+import SidebarCTA from "components/SidebarCTA";
 
 const features = [
   { title: "Resume Bullets", copy: "Six powerful bullets tailored to the job, packed with evidence and ATS keywords." },
@@ -113,12 +114,7 @@ export default function HomePage() {
                 </li>
               </ul>
 
-              <a
-                href="/login"
-                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-amber-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-amber-500"
-              >
-                Fix My Resume Now For Free
-              </a>
+              <SidebarCTA />
 
               <p className="mt-3 text-s text-neutral-400 text-center md:text-left">
                 Limited launch access. No credit card required.
