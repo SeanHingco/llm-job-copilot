@@ -38,8 +38,8 @@ async def capture_event(body: CaptureBody, request: Request, user = Depends(opti
 
     anon_id = body.anon_id or f"server-{uuid4()}"
 
-    print("[analytics.capture] incoming body:", body.dict())
-    print("[analytics.capture] user_id:", user_id, "ip:", ip)
+    # print("[analytics.capture] incoming body:", body.dict())
+    # print("[analytics.capture] user_id:", user_id, "ip:", ip)
 
     try:
         ok = await supabase_db.insert_analytics_event(
@@ -52,7 +52,7 @@ async def capture_event(body: CaptureBody, request: Request, user = Depends(opti
             ua=ua,
             client_event_id=client_event_id,
         )
-        print("[analytics.capture] insert returned:", ok)
+        # print("[analytics.capture] insert returned:", ok)
     except Exception as e:
         # This will show in your server logs and in the HTTP response during debugging
         print("[analytics.capture] insert ERROR:", repr(e))
