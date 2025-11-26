@@ -23,8 +23,8 @@ export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
     return () => { cancelled = true; };
   }, []);
 
-  function onPrimaryClick() {
-    capture("cta_click", {
+  async function onPrimaryClick() {
+    await capture("cta_click", {
       cta_id: "landing_try_now",
       destination: authed ? "/draft" : "/login",
       location: "landing_hero_cta",
