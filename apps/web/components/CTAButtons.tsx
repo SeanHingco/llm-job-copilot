@@ -24,12 +24,12 @@ export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
   }, []);
 
   function onPrimaryClick() {
-    void capture("cta_click", {
+    capture("cta_click", {
       cta_id: "landing_try_now",
       destination: authed ? "/draft" : "/login",
       location: "landing_hero_cta",
     });
-    
+
     router.push(authed ? "/draft" : "/login");
   }
 
@@ -44,6 +44,12 @@ export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
       {enable_how && (
         <a
           href="#how-it-works"
+          onClick={() =>
+            void capture("cta_click", {
+              cta_id: "landing_how_it_works",
+              location: "landing_hero_secondary",
+            })
+          }
           className="inline-flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-neutral-800"
         >
           How it works
