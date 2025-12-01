@@ -3,6 +3,29 @@ import { supabase } from '@/lib/supabaseClient'
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
 
+// guest mode logic
+const GUEST_ID_STORAGE_KEY = 'rb:guest_id';
+
+function getOrCreateGuestId(): string | null {
+  // avoid touching window/localStorage during SSR
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const existing = window.localStorage.getItem(GUEST_ID_STORAGE_KEY);
+    if (existing) return existing;
+
+    const id = (globalThis.crypto?.randomUUID?.() ??
+      // very cheap fallback if randomUUID isn’t available
+      `guest_${Math.random().toString(36).slice(2)}_${Date.now()}`);
+
+    window.localStorage.setItem(GUEST_ID_STORAGE_KEY, id);
+    return id;
+  } catch {
+    // if localStorage is blocked, just bail; backend will treat as anonymous
+    return null;
+  }
+}
+
 export type ApiResponse<T = unknown> = Response & { data: T | null };
 
 export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
@@ -14,7 +37,14 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
   }
 
   const headers = new Headers(init.headers || {})
-  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  } else {
+    const guestId = getOrCreateGuestId()
+    if (guestId) {
+      headers.set('x-guest-id', guestId)
+    }
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     console.log('[apiFetch] sending Authorization?', headers.has('Authorization'))

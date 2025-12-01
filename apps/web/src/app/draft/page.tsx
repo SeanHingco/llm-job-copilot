@@ -25,7 +25,19 @@ const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
 
+const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
+  bullets: { guestAllowed: true },
+  talking_points: { guestAllowed: false },
+  cover_letter: { guestAllowed: false },
+  alignment: { guestAllowed: false },
+};
+
 // type Meta = { remaining_credits?: number };
+
+type AuthState = {
+  ready: boolean;
+  user: any | null;
+};
 
 type BulletsJSON = { bullets: { text: string; job_chunks?: number[] }[] };
 
@@ -169,6 +181,34 @@ const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
     cost: 1,
   },
 };
+
+function useOptionalAuth(): AuthState {
+  const [state, setState] = useState<AuthState>({ ready: false, user: null });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!cancelled) {
+          setState({ ready: true, user: data.user ?? null });
+        }
+      } catch {
+        if (!cancelled) {
+          setState({ ready: true, user: null });
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return state;
+}
 
 function errorToMessage(status: number, body: ErrorBody): string {
   const detailText = asText(body?.detail ?? body?.message ?? body?.error ?? "");
@@ -555,6 +595,7 @@ export default function DraftPage() {
     }, [])
 
     useEffect(() => {
+      if (!ready || !user) return;
       let cancelled = false;
         (async () => {
         const res = await apiFetch<AccountCreditsResponse>('/account/credits')
@@ -589,8 +630,10 @@ export default function DraftPage() {
 
 
     // check auth
-    const { ready } = useRequireAuth()
+    const { ready, user } = useOptionalAuth();
     if (!ready) return null;
+
+const isGuest = !user;
 
     function setPhase(t: Task, phase: TaskPhase, message?: string) {
         setTaskStatus(prev => ({ ...prev, [t]: { phase, message } }));
@@ -718,6 +761,17 @@ export default function DraftPage() {
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
         setTaskStatus(Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }])));
 
+        if (isGuest) {
+          const invalid = selectedTasks.filter(
+            (t) => !TASK_ACCESS[t].guestAllowed
+          );
+          if (invalid.length > 0) {
+            setGenError("Sign up for a free account to run Talking Points, Cover Letters, and Alignment.");
+            // optional: trigger signup modal here
+            return;
+          }
+        }
+
         if (!url && !jobText.trim()) {
             setError("Provide a job URL or paste the job description.");
             return;
@@ -752,7 +806,9 @@ export default function DraftPage() {
 
             setPhase(taskToRun, "running");
 
-            const res = await apiFetch<RunFormPayload>('/draft/run-form', { method: 'POST', body: fd });
+            const endpoint = isGuest ? '/draft/run-form-guest' : '/draft/run-form';
+
+            const res = await apiFetch<RunFormPayload>(endpoint, { method: 'POST', body: fd });
             const out = res.data;
 
             // credits
@@ -1116,7 +1172,7 @@ export default function DraftPage() {
                   <div>
                     <div className="font-semibold">Nice work — your draft is ready 🎉</div>
                     <p className="mt-1 text-sm text-indigo-900/90">
-                      Want free credits? Set up your referral link on your Account page and earn rewards when friends sign up.
+                      Fan of Resume Bender? Refer a friend and get exclusive early access to new features!
                     </p>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -1143,28 +1199,49 @@ export default function DraftPage() {
                 </div>
               </div>
             )}
-            <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4">
-                <div className="mb-3 flex items-center">
-                    <h1 className="text-2xl font-bold">Resume Bender</h1>
+            <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 items-center">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  {/* Top row: Title left, Guest + ? right */}
+                  <div className="flex w-full items-center justify-between">
+                    <h1 className="text-xl font-bold md:text-2xl">Resume Bender</h1>
 
-                    <div className="ml-auto flex items-center gap-2">
-                        <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
-                        {premium?.active && premiumLabel(premium) && (
-                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                            Premium · {premiumLabel(premium)}
-                          </span>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => setShowTut(true)}
-                            title="Open tutorial"
-                            aria-label="Open tutorial"
-                            className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                        >
-                            ?
-                        </button>
+                    <div className="flex items-center gap-2">
+                      {isGuest && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                          Guest mode
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowTut(true)}
+                        title="Open tutorial"
+                        aria-label="Open tutorial"
+                        className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      >
+                        ?
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Second row (mobile) or right-aligned (desktop): Free during launch & credits/premium */}
+                  <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+
+
+                    <CreditBadge
+                      value={credits}
+                      unlimited={isUnlimited}
+                      loading={isGenerating}
+                    />
+
+                    {premium?.active && premiumLabel(premium) && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        Premium · {premiumLabel(premium)}
+                      </span>
+                    )}
+                  </div>
                 </div>
+
                 <div className="bg-white border rounded-2xl shadow-sm p-4 md:p-6">
                     <form className="grid grid-cols-1 gap-4 md:gap-6" onSubmit={(e) => e.preventDefault()}>
                         <div className="space-y-2">
@@ -1213,17 +1290,34 @@ export default function DraftPage() {
                           <label className={labelBase}>Tasks</label>
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-2">
                               {TASK_OPTIONS.map(opt => {
+                                  const access = TASK_ACCESS[opt.key as Task];
+                                  const lockedForGuest = isGuest && !access.guestAllowed;
+                                  const checked = selectedTasks.includes(opt.key as Task);
                                   const st = taskStatus[opt.key]?.phase;
                                   const details = TASK_DETAILS[opt.key]; 
                                   return (
-                                      <label key={opt.key} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800">
+                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800 ${
+                                                                        lockedForGuest ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                                                                      }`}>
                                           <input
                                               type="checkbox"
                                               className="h-4 w-4 rounded border-slate-300"
-                                              checked={selectedTasks.includes(opt.key)}
-                                              onChange={() => toggleTask(opt.key)}
+                                              checked={checked}
+                                              onChange={() => {
+                                                if (lockedForGuest) return;
+                                                toggleTask(opt.key as Task);
+                                              }}
                                           />
-                                          <span>{opt.label}</span>
+                                          <div className="flex flex-col">
+                                            <div className="flex items-center gap-1">
+                                              <span className="font-medium">{opt.label}</span>
+                                              {lockedForGuest && (
+                                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                                  🔒 Sign up to use
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
 
                                           {/* cost badge */}
                                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
