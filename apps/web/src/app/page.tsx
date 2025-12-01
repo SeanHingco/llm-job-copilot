@@ -220,7 +220,7 @@ export default function HomePage() {
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
             <blockquote className="text-neutral-100">
-              “For the first time I actually understood what was wrong with my bullets. It didn&apos;t just rewrite them. It taught me how to write them.”
+              “For the first time I actually understood what was wrong with my bullets. It didn’t just rewrite them. It taught me how to write them.”
             </blockquote>
             <figcaption className="mt-3 text-xs text-neutral-400">
               — J.K., New grad software engineer
@@ -229,7 +229,7 @@ export default function HomePage() {
 
           <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
             <blockquote className="text-neutral-100">
-              “Good research relies on a good team. Resume Bender really helped me target my C&apos;s to the team I align best with.”
+              “Good research relies on a good team. Resume Bender really helped me target my CV’s to the team I align best with.”
             </blockquote>
             <figcaption className="mt-3 text-xs text-neutral-400">
               — V.V., Healthcare Professional
