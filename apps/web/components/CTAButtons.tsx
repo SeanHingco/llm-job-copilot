@@ -26,11 +26,11 @@ export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
   function onPrimaryClick() {
     void capture("cta_click", {
       cta_id: "landing_try_now",
-      destination: authed ? "/draft" : "/login",
+      destination: authed ? "/draft" : "/draft",
       location: "landing_hero_cta",
     });
 
-    router.push(authed ? "/draft" : "/login");
+    router.push(authed ? "/draft" : "/draft");
   }
 
   return (

@@ -207,6 +207,51 @@ export default function HomePage() {
         </p>
       </section>
 
+      {/* Testimonials */}
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <h2 className="text-2xl md:text-3xl font-bold">
+          What job seekers are saying
+        </h2>
+        <p className="mt-2 text-neutral-300 max-w-xl">
+          Early users are using Resume Bender to tighten their resumes and feel
+          more confident hitting &ldquo;submit&rdquo; on applications.
+        </p>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “For the first time I actually understood what was wrong with my bullets. It didn’t just rewrite them. It taught me how to write them.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — J.K., New grad software engineer
+            </figcaption>
+          </figure>
+
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “Good research relies on a good team. Resume Bender 
+              really helped me target my CV's to the team I align best with.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — V.V., Healthcare Professional
+            </figcaption>
+          </figure>
+
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “Transitioning out of the Army was overwhelming. Resume Bender helped me translate my military experience into civilian language and made switching career paths feel possible.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — I.S., Army Veteran seeking career change
+            </figcaption>
+          </figure>
+        </div>
+
+        <div className="mt-8">
+          <CTAButtons enable_how={false} />
+        </div>
+      </section>
+
 
 
       {/* How it works */}
