@@ -36,7 +36,7 @@ const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
 
 type AuthState = {
   ready: boolean;
-  user: any | null;
+  user: unknown | null;
 };
 
 type BulletsJSON = { bullets: { text: string; job_chunks?: number[] }[] };
