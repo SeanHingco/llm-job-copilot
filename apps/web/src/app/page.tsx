@@ -229,7 +229,7 @@ export default function HomePage() {
 
           <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
             <blockquote className="text-neutral-100">
-              “Good research relies on a good team. Resume Bender really helped me target my C&apos;'s to the team I align best with.”
+              “Good research relies on a good team. Resume Bender really helped me target my C&apos;s to the team I align best with.”
             </blockquote>
             <figcaption className="mt-3 text-xs text-neutral-400">
               — V.V., Healthcare Professional
