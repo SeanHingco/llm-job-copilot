@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 
-export default function Brand({ className = "" }: { className?: string }) {
+export default function Brand({ className = "", textClassName = "text-neutral-900" }: { className?: string; textClassName?: string; }) {
   return (
     <Link href="/" className={`flex items-center gap-2 ${className}`} aria-label="Resume Bender home">
       <Image
@@ -12,7 +12,7 @@ export default function Brand({ className = "" }: { className?: string }) {
         height={20}
         priority
       />
-      <span className="font-semibold tracking-tight text-neutral-900">Resume Bender</span>
+      <span className={`font-semibold tracking-tight ${textClassName}`}>Resume Bender</span>
     </Link>
   );
 }
