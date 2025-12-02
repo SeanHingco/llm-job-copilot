@@ -1,6 +1,7 @@
 // app/page.tsx
 import CTAButtons from "components/CTAButtons";
 import SidebarCTA from "components/SidebarCTA";
+import Brand from "components/Brand";
 
 const features = [
   { title: "Resume Bullets", copy: "Six powerful bullets tailored to the job, packed with evidence and ATS keywords." },
@@ -48,7 +49,8 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-40 w-full border-b border-neutral-900/60 bg-neutral-950/70 backdrop-blur">
         <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Resume Bender</span>
+          <Brand textClassName="text-white" />
+          {/* <span className="font-semibold tracking-tight">Resume Bender</span> */}
           <div className="flex items-center gap-3">
             <a href="#how-it-works" className="text-sm text-neutral-300 hover:text-white">
               How it works
