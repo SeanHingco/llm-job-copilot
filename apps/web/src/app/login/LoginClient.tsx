@@ -11,7 +11,7 @@ export default function LoginClient() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+    const [mode, setMode] = useState<'signin' | 'signup'>('signup');
     const [fullName, setFullName] = useState('');
 
     const router = useRouter();

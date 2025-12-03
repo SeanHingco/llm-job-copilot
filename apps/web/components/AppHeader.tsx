@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import SignOutButton from 'components/SignOutButton'
+import SignUpButton from 'components/SignUpButton'
 import Brand from 'components/Brand'
 import {useEffect, useRef, useState} from 'react';
+import { useOptionalAuth } from '@/lib/hooks/useOptionalAuth';
 
 const link = (href: string, label: string, cur: string) => (
   <Link
@@ -23,6 +25,10 @@ export default function AppHeader() {
   const hide = pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/forgot-password');
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const { ready, user } = useOptionalAuth();
+  const isGuest = !user;
+
 
   useEffect(() => {
     if (!open) return;
@@ -76,7 +82,10 @@ export default function AppHeader() {
               <Link href="/blog" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Blog</Link>
               <div className="my-1 h-px bg-black/10" />
               <div className="px-1 py-1">
-                <SignOutButton className="w-full justify-center" />
+                {isGuest ? (
+                  <SignUpButton className="w-full justify-center" />
+                ) : 
+                  <SignOutButton className="w-full justify-center" />}
               </div>
             </div>
           )}
@@ -92,7 +101,10 @@ export default function AppHeader() {
           {link('/account/password', 'Password', pathname)} */}
         </div>
         <div className="hidden md:block">
-          <SignOutButton />
+          {isGuest ? (
+            <SignUpButton/>
+          ) : 
+            <SignOutButton/>}
         </div>
       </div>
     </header>
