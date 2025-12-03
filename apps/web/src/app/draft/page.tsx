@@ -568,6 +568,7 @@ export default function DraftPage() {
     const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
     const [premium, setPremium] = useState<{active:boolean; expires_at?:string; days_left?:number} | null>(null);
     const [showReferralPrompt, setShowReferralPrompt] = useState(false);
+    const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -740,19 +741,43 @@ const isGuest = !user;
 
     function maybeShowReferralNudge() {
       try {
-        // const firstDone = localStorage.getItem("rb:first_task_done");
-        // const nudgeSeen = localStorage.getItem("rb:referral_nudge_seen");
+        const firstDone = localStorage.getItem("rb:first_task_done");
+        const nudgeSeen = localStorage.getItem("rb:referral_nudge_seen");
 
-        // // Only trigger the very first time they ever complete a task
-        // if (!firstDone) {
-        //   localStorage.setItem("rb:first_task_done", "1");
-        //   if (!nudgeSeen) {
-        //     setShowReferralPrompt(true);
-        //   }
-        // }
-        setShowReferralPrompt(true);
+        // Only trigger the very first time they ever complete a task
+        if (!firstDone) {
+          if (!firstDone) {
+            setShowReferralPrompt(true);
+            localStorage.setItem("rb:first_task_done", "1");
+            localStorage.setItem("rb:referral_nudge_seen", "1");
+          }
+        }
       } catch {
         // if localStorage explodes, just silently skip
+      }
+    }
+
+    function maybeShowGuestSignupNudge(taskRan: Task) {
+      if (!isGuest) return;                  // only for guests
+      if (!TASK_ACCESS[taskRan]?.guestAllowed) return;
+      // ^ not strictly necessary since guests only have bullets,
+      //   but keeps it future-proof.
+
+      try {
+        const raw = localStorage.getItem("rb:guest_task_runs");
+        const prev = raw ? Number(raw) : 0;
+        const next = Number.isFinite(prev) ? prev + 1 : 1;
+        localStorage.setItem("rb:guest_task_runs", String(next));
+
+        // Show after first run, then occasionally later.
+        // You can tweak this pattern (1, 3, 7, ...)
+        const shouldShow = next === 1 || next === 3 || next === 7;
+
+        if (shouldShow) {
+          setShowGuestSignupPrompt(true);
+        }
+      } catch {
+        // if localStorage fails, just skip the nudge
       }
     }
 
@@ -864,6 +889,9 @@ const isGuest = !user;
                     setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
                     setPhase(taskToRun, "done");
                     maybeShowReferralNudge();
+                    if (isGuest) {
+                      maybeShowGuestSignupNudge(taskToRun);
+                    }
             }
         } catch (e: unknown) {
             setGenError(errToString(e));
@@ -1207,9 +1235,11 @@ const isGuest = !user;
 
                     <div className="flex items-center gap-2">
                       {isGuest && (
-                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                          Guest mode
-                        </span>
+                        <Tooltip content="Guest mode: You can generate resume bullets as a guest. Sign up to unlock the full toolkit.">
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                            Guest mode
+                          </span>
+                        </Tooltip>
                       )}
 
                       <button
@@ -1296,8 +1326,8 @@ const isGuest = !user;
                                   const st = taskStatus[opt.key]?.phase;
                                   const details = TASK_DETAILS[opt.key]; 
                                   return (
-                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800 ${
-                                                                        lockedForGuest ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 relative overflow-visible rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800 ${
+                                                                        lockedForGuest ? "cursor-not-allowed bg-neutral-100 text-neutral-400 ring-1 ring-neutral-200" : "cursor-pointer"
                                                                       }`}>
                                           <input
                                               type="checkbox"
@@ -1312,23 +1342,40 @@ const isGuest = !user;
                                             <div className="flex items-center gap-1">
                                               <span className="font-medium">{opt.label}</span>
                                               {lockedForGuest && (
-                                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                                                  🔒 Sign up to use
-                                                </span>
+                                                <Tooltip content="Sign up for a free account to unlock this task.">
+                                                  <span className="
+                                                    inline-flex items-center gap-1
+                                                    rounded-full
+                                                    bg-amber-200/70
+                                                    px-2 py-[2px]
+                                                    text-center
+                                                    text-[11px] leading-tight
+                                                    font-medium text-amber-900
+                                                  ">
+                                                    <span className="text-[12px]">🔒</span>
+                                                    <span>Sign-up required (free) </span>
+                                                  </span>
+                                                </Tooltip>
                                               )}
                                             </div>
                                           </div>
 
                                           {/* cost badge */}
-                                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
-                                              {details.cost} credits
-                                          </span>
+                                          {!FREE_MODE &&
+                                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                                {details.cost} credits
+                                            </span>
+                                          }
                                           <div className="hidden md:inline-flex">
                                             <Tooltip content={
                                                 <span>
                                                     {details.info}
                                                     <br />
-                                                    <span className="text-neutral-500">Est. cost: {details.cost} credits</span>
+                                                    {!FREE_MODE &&
+                                                      <span className="text-neutral-500">
+                                                        Est. cost: {details.cost} credits
+                                                      </span>
+                                                    }
                                                 </span>
                                             }>
                                                 <button
@@ -1439,6 +1486,40 @@ const isGuest = !user;
                     >
                       Upgrade
                     </a>
+                  </div>
+                )}
+                {isGuest && showGuestSignupPrompt && (
+                  <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 mb-4">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="font-semibold">Nice — your bullets are ready 🎉</div>
+                        <p className="mt-1 text-sm text-emerald-900/90">
+                          Create a free account to save this draft and unlock Talking Points,
+                          Cover Letters, and full Alignment checks for your next applications.
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowGuestSignupPrompt(false);
+                          }}
+                          className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
+                        >
+                          Maybe later
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowGuestSignupPrompt(false);
+                            router.push("/login?from=draft_guest");
+                          }}
+                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                        >
+                          Sign up free
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {Object.keys(results).length > 0 && (
