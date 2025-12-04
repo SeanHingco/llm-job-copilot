@@ -25,7 +25,20 @@ const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
 // types
 type Task = "bullets" | "talking_points" | "cover_letter" | "alignment" | "bender_score";
 
+const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
+  bullets: { guestAllowed: true },
+  talking_points: { guestAllowed: false },
+  cover_letter: { guestAllowed: false },
+  alignment: { guestAllowed: false },
+  bender_score: { guestAllowed: false },
+};
+
 // type Meta = { remaining_credits?: number };
+
+type AuthState = {
+  ready: boolean;
+  user: unknown | null;
+};
 
 type BulletsJSON = { bullets: { text: string; job_chunks?: number[] }[] };
 
@@ -174,6 +187,34 @@ const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
     cost: 1,
   },
 };
+
+function useOptionalAuth(): AuthState {
+  const [state, setState] = useState<AuthState>({ ready: false, user: null });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!cancelled) {
+          setState({ ready: true, user: data.user ?? null });
+        }
+      } catch {
+        if (!cancelled) {
+          setState({ ready: true, user: null });
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return state;
+}
 
 function errorToMessage(status: number, body: ErrorBody): string {
   const detailText = asText(body?.detail ?? body?.message ?? body?.error ?? "");
@@ -533,6 +574,7 @@ export default function DraftPage() {
     const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
     const [premium, setPremium] = useState<{active:boolean; expires_at?:string; days_left?:number} | null>(null);
     const [showReferralPrompt, setShowReferralPrompt] = useState(false);
+    const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -560,6 +602,7 @@ export default function DraftPage() {
     }, [])
 
     useEffect(() => {
+      if (!ready || !user) return;
       let cancelled = false;
         (async () => {
         const res = await apiFetch<AccountCreditsResponse>('/account/credits')
@@ -594,8 +637,10 @@ export default function DraftPage() {
 
 
     // check auth
-    const { ready } = useRequireAuth()
+    const { ready, user } = useOptionalAuth();
     if (!ready) return null;
+
+const isGuest = !user;
 
     function setPhase(t: Task, phase: TaskPhase, message?: string) {
         setTaskStatus(prev => ({ ...prev, [t]: { phase, message } }));
@@ -702,19 +747,43 @@ export default function DraftPage() {
 
     function maybeShowReferralNudge() {
       try {
-        // const firstDone = localStorage.getItem("rb:first_task_done");
-        // const nudgeSeen = localStorage.getItem("rb:referral_nudge_seen");
+        const firstDone = localStorage.getItem("rb:first_task_done");
+        const nudgeSeen = localStorage.getItem("rb:referral_nudge_seen");
 
-        // // Only trigger the very first time they ever complete a task
-        // if (!firstDone) {
-        //   localStorage.setItem("rb:first_task_done", "1");
-        //   if (!nudgeSeen) {
-        //     setShowReferralPrompt(true);
-        //   }
-        // }
-        setShowReferralPrompt(true);
+        // Only trigger the very first time they ever complete a task
+        if (!firstDone) {
+          if (!firstDone) {
+            setShowReferralPrompt(true);
+            localStorage.setItem("rb:first_task_done", "1");
+            localStorage.setItem("rb:referral_nudge_seen", "1");
+          }
+        }
       } catch {
         // if localStorage explodes, just silently skip
+      }
+    }
+
+    function maybeShowGuestSignupNudge(taskRan: Task) {
+      if (!isGuest) return;                  // only for guests
+      if (!TASK_ACCESS[taskRan]?.guestAllowed) return;
+      // ^ not strictly necessary since guests only have bullets,
+      //   but keeps it future-proof.
+
+      try {
+        const raw = localStorage.getItem("rb:guest_task_runs");
+        const prev = raw ? Number(raw) : 0;
+        const next = Number.isFinite(prev) ? prev + 1 : 1;
+        localStorage.setItem("rb:guest_task_runs", String(next));
+
+        // Show after first run, then occasionally later.
+        // You can tweak this pattern (1, 3, 7, ...)
+        const shouldShow = next === 1 || next === 3 || next === 7;
+
+        if (shouldShow) {
+          setShowGuestSignupPrompt(true);
+        }
+      } catch {
+        // if localStorage fails, just skip the nudge
       }
     }
 
@@ -722,6 +791,17 @@ export default function DraftPage() {
         capture("task_run_clicked", { tasks: selectedTasks });
         setError(""); setBullets(""); setGenError(""); setResult(null); setResults({});
         setTaskStatus(Object.fromEntries(selectedTasks.map(t => [t, { phase: "queued" }])));
+
+        if (isGuest) {
+          const invalid = selectedTasks.filter(
+            (t) => !TASK_ACCESS[t].guestAllowed
+          );
+          if (invalid.length > 0) {
+            setGenError("Sign up for a free account to run Talking Points, Cover Letters, and Alignment.");
+            // optional: trigger signup modal here
+            return;
+          }
+        }
 
         if (!url && !jobText.trim()) {
             setError("Provide a job URL or paste the job description.");
@@ -757,7 +837,9 @@ export default function DraftPage() {
 
             setPhase(taskToRun, "running");
 
-            const res = await apiFetch<RunFormPayload>('/draft/run-form', { method: 'POST', body: fd });
+            const endpoint = isGuest ? '/draft/run-form-guest' : '/draft/run-form';
+
+            const res = await apiFetch<RunFormPayload>(endpoint, { method: 'POST', body: fd });
             const out = res.data;
 
             // credits
@@ -813,6 +895,9 @@ export default function DraftPage() {
                     setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
                     setPhase(taskToRun, "done");
                     maybeShowReferralNudge();
+                    if (isGuest) {
+                      maybeShowGuestSignupNudge(taskToRun);
+                    }
             }
         } catch (e: unknown) {
             setGenError(errToString(e));
@@ -1121,7 +1206,7 @@ export default function DraftPage() {
                   <div>
                     <div className="font-semibold">Nice work — your draft is ready 🎉</div>
                     <p className="mt-1 text-sm text-indigo-900/90">
-                      Want free credits? Set up your referral link on your Account page and earn rewards when friends sign up.
+                      Fan of Resume Bender? Refer a friend and get exclusive early access to new features!
                     </p>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -1148,28 +1233,51 @@ export default function DraftPage() {
                 </div>
               </div>
             )}
-            <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4">
-                <div className="mb-3 flex items-center">
-                    <h1 className="text-2xl font-bold">Resume Bender</h1>
+            <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 items-center">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  {/* Top row: Title left, Guest + ? right */}
+                  <div className="flex w-full items-center justify-between">
+                    <h1 className="text-xl font-bold md:text-2xl">Resume Bender</h1>
 
-                    <div className="ml-auto flex items-center gap-2">
-                        <CreditBadge value={credits} unlimited={isUnlimited} loading={isGenerating} />
-                        {premium?.active && premiumLabel(premium) && (
-                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                            Premium · {premiumLabel(premium)}
+                    <div className="flex items-center gap-2">
+                      {isGuest && (
+                        <Tooltip content="Guest mode: You can generate resume bullets as a guest. Sign up to unlock the full toolkit.">
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                            Guest mode
                           </span>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => setShowTut(true)}
-                            title="Open tutorial"
-                            aria-label="Open tutorial"
-                            className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                        >
-                            ?
-                        </button>
+                        </Tooltip>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowTut(true)}
+                        title="Open tutorial"
+                        aria-label="Open tutorial"
+                        className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      >
+                        ?
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Second row (mobile) or right-aligned (desktop): Free during launch & credits/premium */}
+                  <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+
+
+                    <CreditBadge
+                      value={credits}
+                      unlimited={isUnlimited}
+                      loading={isGenerating}
+                    />
+
+                    {premium?.active && premiumLabel(premium) && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        Premium · {premiumLabel(premium)}
+                      </span>
+                    )}
+                  </div>
                 </div>
+
                 <div className="bg-white border rounded-2xl shadow-sm p-4 md:p-6">
                     <form className="grid grid-cols-1 gap-4 md:gap-6" onSubmit={(e) => e.preventDefault()}>
                         <div className="space-y-2">
@@ -1218,28 +1326,62 @@ export default function DraftPage() {
                           <label className={labelBase}>Tasks</label>
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-2">
                               {TASK_OPTIONS.map(opt => {
+                                  const access = TASK_ACCESS[opt.key as Task];
+                                  const lockedForGuest = isGuest && !access.guestAllowed;
+                                  const checked = selectedTasks.includes(opt.key as Task);
                                   const st = taskStatus[opt.key]?.phase;
                                   const details = TASK_DETAILS[opt.key]; 
                                   return (
-                                      <label key={opt.key} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800">
+                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 relative overflow-visible rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800 ${
+                                                                        lockedForGuest ? "cursor-not-allowed bg-neutral-100 text-neutral-400 ring-1 ring-neutral-200" : "cursor-pointer"
+                                                                      }`}>
                                           <input
                                               type="checkbox"
                                               className="h-4 w-4 rounded border-slate-300"
-                                              checked={selectedTasks.includes(opt.key)}
-                                              onChange={() => toggleTask(opt.key)}
+                                              checked={checked}
+                                              onChange={() => {
+                                                if (lockedForGuest) return;
+                                                toggleTask(opt.key as Task);
+                                              }}
                                           />
-                                          <span>{opt.label}</span>
+                                          <div className="flex flex-col">
+                                            <div className="flex items-center gap-1">
+                                              <span className="font-medium">{opt.label}</span>
+                                              {lockedForGuest && (
+                                                <Tooltip content="Sign up for a free account to unlock this task.">
+                                                  <span className="
+                                                    inline-flex items-center gap-1
+                                                    rounded-full
+                                                    bg-amber-200/70
+                                                    px-2 py-[2px]
+                                                    text-center
+                                                    text-[11px] leading-tight
+                                                    font-medium text-amber-900
+                                                  ">
+                                                    <span className="text-[12px]">🔒</span>
+                                                    <span>Sign-up required (free) </span>
+                                                  </span>
+                                                </Tooltip>
+                                              )}
+                                            </div>
+                                          </div>
 
                                           {/* cost badge */}
-                                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
-                                              {details.cost} credits
-                                          </span>
+                                          {!FREE_MODE &&
+                                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                                {details.cost} credits
+                                            </span>
+                                          }
                                           <div className="hidden md:inline-flex">
                                             <Tooltip content={
                                                 <span>
                                                     {details.info}
                                                     <br />
-                                                    <span className="text-neutral-500">Est. cost: {details.cost} credits</span>
+                                                    {!FREE_MODE &&
+                                                      <span className="text-neutral-500">
+                                                        Est. cost: {details.cost} credits
+                                                      </span>
+                                                    }
                                                 </span>
                                             }>
                                                 <button
@@ -1350,6 +1492,40 @@ export default function DraftPage() {
                     >
                       Upgrade
                     </a>
+                  </div>
+                )}
+                {isGuest && showGuestSignupPrompt && (
+                  <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 mb-4">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="font-semibold">Nice — your bullets are ready 🎉</div>
+                        <p className="mt-1 text-sm text-emerald-900/90">
+                          Create a free account to save this draft and unlock Talking Points,
+                          Cover Letters, and full Alignment checks for your next applications.
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowGuestSignupPrompt(false);
+                          }}
+                          className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
+                        >
+                          Maybe later
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowGuestSignupPrompt(false);
+                            router.push("/login?from=draft_guest");
+                          }}
+                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                        >
+                          Sign up free
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {Object.keys(results).length > 0 && (
