@@ -1,5 +1,7 @@
 // app/page.tsx
 import CTAButtons from "components/CTAButtons";
+import SidebarCTA from "components/SidebarCTA";
+import Brand from "components/Brand";
 
 const features = [
   { title: "Resume Bullets", copy: "Six powerful bullets tailored to the job, packed with evidence and ATS keywords." },
@@ -47,7 +49,8 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-40 w-full border-b border-neutral-900/60 bg-neutral-950/70 backdrop-blur">
         <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Resume Bender</span>
+          <Brand textClassName="text-white" />
+          {/* <span className="font-semibold tracking-tight">Resume Bender</span> */}
           <div className="flex items-center gap-3">
             <a href="#how-it-works" className="text-sm text-neutral-300 hover:text-white">
               How it works
@@ -113,12 +116,7 @@ export default function HomePage() {
                 </li>
               </ul>
 
-              <a
-                href="/login"
-                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-amber-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-amber-500"
-              >
-                Fix My Resume Now For Free
-              </a>
+              <SidebarCTA />
 
               <p className="mt-3 text-s text-neutral-400 text-center md:text-left">
                 Limited launch access. No credit card required.
@@ -200,11 +198,59 @@ export default function HomePage() {
               className="rounded-xl border border-neutral-800 w-full"
             />
           </div>
+
+          <div className="mt-8">
+              <CTAButtons enable_how={false}/>
+          </div>
         </div>
 
         <p className="mt-6 text-xs text-neutral-500 text-center md:text-left">
           Screenshots captured from the live product. Your resume data is not collected and sold.
         </p>
+      </section>
+
+      {/* Testimonials */}
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <h2 className="text-2xl md:text-3xl font-bold">
+          What job seekers are saying
+        </h2>
+        <p className="mt-2 text-neutral-300 max-w-xl">
+          Early users are using Resume Bender to tighten their resumes and feel
+          more confident hitting &ldquo;submit&rdquo; on applications.
+        </p>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “For the first time I actually understood what was wrong with my bullets. It didn’t just rewrite them. It taught me how to write them.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — J.K., New grad software engineer
+            </figcaption>
+          </figure>
+
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “Good research relies on a good team. Resume Bender really helped me target my CV’s to the team I align best with.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — V.V., Healthcare Professional
+            </figcaption>
+          </figure>
+
+          <figure className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm">
+            <blockquote className="text-neutral-100">
+              “Transitioning out of the Army was overwhelming. Resume Bender helped me translate my military experience into civilian language and made switching career paths feel possible.”
+            </blockquote>
+            <figcaption className="mt-3 text-xs text-neutral-400">
+              — I.S., Army Veteran seeking career change
+            </figcaption>
+          </figure>
+        </div>
+
+        <div className="mt-8">
+          <CTAButtons enable_how={false} />
+        </div>
       </section>
 
 
@@ -239,6 +285,10 @@ export default function HomePage() {
         <p className="mt-8 text-xs text-neutral-400">
           We don’t sell your data. You control what’s stored and can delete it anytime.
         </p>
+
+        <div className="mt-8">
+          <CTAButtons enable_how={false}/>
+        </div>
       </section>
 
       <script

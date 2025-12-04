@@ -4,8 +4,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { capture } from "@/lib/analytics"; 
 
-export default function CTAButtons() {
+interface CTAButtonsProps {
+  enable_how?: boolean;
+};
+
+export default function CTAButtons({enable_how = true}: CTAButtonsProps) {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
 
@@ -19,7 +24,13 @@ export default function CTAButtons() {
   }, []);
 
   function onPrimaryClick() {
-    router.push(authed ? "/draft" : "/login");
+    void capture("cta_click", {
+      cta_id: "landing_try_now",
+      destination: authed ? "/draft" : "/draft",
+      location: "landing_hero_cta",
+    });
+
+    router.push(authed ? "/draft" : "/draft");
   }
 
   return (
@@ -30,12 +41,20 @@ export default function CTAButtons() {
       >
         Try it now
       </button>
-      <a
-        href="#how-it-works"
-        className="inline-flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-neutral-800"
-      >
-        How it works
-      </a>
+      {enable_how && (
+        <a
+          href="#how-it-works"
+          onClick={() =>
+            void capture("cta_click", {
+              cta_id: "landing_how_it_works",
+              location: "landing_hero_secondary",
+            })
+          }
+          className="inline-flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-neutral-800"
+        >
+          How it works
+        </a>
+      )}
     </div>
   );
 }

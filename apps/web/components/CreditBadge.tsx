@@ -12,7 +12,7 @@ export default function CreditBadge({ value, loading, unlimited=false }: CreditP
   if (FREE_MODE) {
     return (
       <div
-        className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm"
+        className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm whitespace-nowrap"
         aria-live="polite"
       >
         <span className="font-medium">Free during launch</span>

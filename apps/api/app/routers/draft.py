@@ -42,6 +42,8 @@ POS_PATTERNS = [
     "preferred qualifications", "nice to have"
 ]
 
+GUEST_ALLOWED_TASKS: set[Task] = {"bullets"}
+
 class DraftReq(BaseModel):
     task: Task = "bullets"
     url: Optional[HttpUrl] = None
@@ -103,7 +105,8 @@ def looks_like_job_context(text: str, result: dict) -> tuple[bool, str]:
 async def _log_event_safe(
     request: Request | None,
     *,
-    user_id: str | None,
+    user_id: str | None = None,
+    anon_id: str | None = None,
     name: str,
     props: dict
 ):
@@ -382,6 +385,105 @@ async def draft_run(
         data["meta"]["remaining_credits"] = data["meta"].get(
             "remaining_credits", 9999
         )
+
+    return data
+
+
+@router.post("/run-form-guest")
+async def draft_run_form_guest(
+    request: Request,
+    url: Optional[str] = Form(None),         # allow URL or pasted JD like normal
+    job_text: Optional[str] = Form(None),
+    q: Optional[str] = Form(None),
+    job_title: Optional[str] = Form(None),
+    resume: Optional[str] = Form(""),
+    resume_file: Optional[UploadFile] = File(None),
+    task: Task = Form("bullets"),
+):
+    # 1) Enforce: guests can only run bullets
+    if task not in GUEST_ALLOWED_TASKS:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "GUEST_FEATURE_LOCKED",
+                "message": "Sign up for a free account to use this feature.",
+            },
+        )
+
+    # 2) Resolve anon_id from header (set by apiFetch)
+    anon_id = request.headers.get("x-guest-id") or None
+
+    # 3) Optional: simple rate limiting per guest+task
+    #    (mirrors your existing throttle_multi logic, but keyed on anon_id/ip)
+    key_id = anon_id or (request.client.host if request.client else "unknown")
+    ok, retry_after = throttle_multi(f"guest:{key_id}:task:{task}")
+    if not ok:
+        await _log_event_safe(
+            request,
+            user_id=None,
+            anon_id=anon_id,
+            name="rate_limited_guest",
+            props={"task": task, "retry_after": retry_after},
+        )
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "RATE_LIMITED",
+                "message": "You’ve hit the limit for guest runs. Create a free account to keep using Bullets.",
+                "retry_after": retry_after,
+            },
+        )
+
+    # 4) If a resume file is provided, extract text like your normal flow
+    resume_text: str = resume or ""
+    if resume_file is not None:
+        # reuse your existing resume extraction route
+        try:
+            extracted = await extract_route(resume_file)
+            resume_text = extracted.get("text") or resume_text
+        except Exception:
+            # don't fail the whole request if resume parsing explodes
+            pass
+
+    # 5) Build DraftReq and run generation, same as main endpoint
+    try:
+        req = DraftReq(
+            task=task,
+            url=url,  # pydantic will validate/convert HttpUrl
+            q=q,
+            job_title=job_title,
+            resume=resume_text,
+            job_text=job_text,
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    try:
+        data = await _run_generation(req=req)
+    except Exception as e:
+        # generate_text raises RuntimeError with helpful details; surface them
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+
+    # 6) Guests do NOT spend credits; just keep a meta shape the frontend understands
+    data.setdefault("meta", {})
+    # Give them a dummy remaining_credits so the UI doesn't freak out
+    data["meta"]["remaining_credits"] = data["meta"].get("remaining_credits", 9999)
+    data["meta"]["unlimited"] = False
+
+    # 7) Analytics: log as anon
+    await _log_event_safe(
+        request,
+        user_id=None,
+        anon_id=anon_id,
+        name="guest_run_form",
+        props={
+            "task": task,
+            "has_url": bool(url),
+            "has_job_text": bool(job_text and job_text.strip()),
+            "has_resume": bool(resume_text.strip()),
+            "job_title_present": bool(job_title and job_title.strip()),
+        },
+    )
 
     return data
 
