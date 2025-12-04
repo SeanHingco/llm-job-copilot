@@ -23,13 +23,14 @@ import Head from 'next/head';
 const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
 
 // types
-type Task = "bullets" | "talking_points" | "cover_letter" | "alignment";
+type Task = "bullets" | "talking_points" | "cover_letter" | "alignment" | "bender_score";
 
 const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
   bullets: { guestAllowed: true },
   talking_points: { guestAllowed: false },
   cover_letter: { guestAllowed: false },
   alignment: { guestAllowed: false },
+  bender_score: { guestAllowed: false },
 };
 
 // type Meta = { remaining_credits?: number };
@@ -161,6 +162,7 @@ const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "talking_points",  label: "Talking Points" },
   { key: "cover_letter",    label: "Cover Letter" },
   { key: "alignment",       label: "Alignment" },
+  { key: "bender_score",    label: "Bender Score (beta)" },
 ];
 
 const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
@@ -178,6 +180,10 @@ const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
   },
   alignment: {
     info: "Where your resume lines up with the JD and where it doesn’t.",
+    cost: 1,
+  },
+  bender_score: {
+    info: "Prototype overall fit score using ATS, experience, CAR quality, and more.",
     cost: 1,
   },
 };
@@ -1529,7 +1535,9 @@ const isGuest = !user;
                         const title =
                             t === "bullets" ? "Resume Bullets" :
                             t === "talking_points" ? "Talking Points" :
-                            t === "cover_letter" ? "Cover Letter" : "Alignment";
+                            t === "cover_letter" ? "Cover Letter" : "Alignment"
+                            t === "bender_score" ? "Bender Score (beta)" :
+                            t;
                         return (
                             <section key={t}>
                             <h2 className="text-lg font-bold mb-2">{title}</h2>
