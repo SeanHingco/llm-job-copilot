@@ -5,10 +5,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os, stripe, json, sys, logging, uuid, time
 from datetime import datetime, timezone
+from .core.errors import install_error_handlers
 from .routers import ingest
 from .routers import draft
 from .routers import resume
 from .routers import analytics
+from .routers import agentic_v3
 from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .utils.security_headers import SecurityHeadersMiddleware
@@ -29,6 +31,7 @@ from .supabase_db import (upsert_user,
 
 
 app = FastAPI(title="LLM Job Copilot API")
+install_error_handlers(app)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -591,3 +594,5 @@ app.include_router(resume.router)
 app.include_router(analytics.router)
 
 app.include_router(referral.router)
+
+app.include_router(agentic_v3.router)
