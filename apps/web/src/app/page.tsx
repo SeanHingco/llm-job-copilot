@@ -151,7 +151,7 @@ export default function HomePage() {
           impact-focused bullet tailored to the job description.
         </p>
 
-        <div className="mt-10 grid gap-10 md:grid-cols-2 items-start">
+        <div className="mt-10 grid gap-10 md:grid-cols-2 items-stretch">
           {/* Before / After card */}
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
             <h3 className="text-lg font-semibold mb-4">
