@@ -151,7 +151,7 @@ export default function HomePage() {
           impact-focused bullet tailored to the job description.
         </p>
 
-        <div className="mt-10 grid gap-10 md:grid-cols-2 items-start">
+        <div className="mt-10 grid gap-10 md:grid-cols-2 items-stretch">
           {/* Before / After card */}
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
             <h3 className="text-lg font-semibold mb-4">
@@ -198,15 +198,26 @@ export default function HomePage() {
               className="rounded-xl border border-neutral-800 w-full"
             />
           </div>
-
-          <div className="mt-8">
-              <CTAButtons enable_how={false}/>
-          </div>
         </div>
 
         <p className="mt-6 text-xs text-neutral-500 text-center md:text-left">
           Screenshots captured from the live product. Your resume data is not collected and sold.
         </p>
+
+        {/* Demo Video */}
+        <div className="mt-10">
+          <video
+            src="/RB_Demo.mp4"
+            controls
+            loop
+            playsInline
+            className="w-full rounded-2xl border border-neutral-800 shadow-xl"
+          />
+        </div>
+
+        <div className="mt-8">
+            <CTAButtons enable_how={false}/>
+        </div>
       </section>
 
       {/* Testimonials */}
