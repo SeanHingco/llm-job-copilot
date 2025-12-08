@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "next-themes";
 // import AppHeader from "components/AppHeader";
 import HeaderGate from "components/HeaderGate";
 import Footer from "components/Footer"
@@ -59,13 +60,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark scroll-smooth">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <HeaderGate />
-        {children}
-        <Footer />
+        <ThemeProvider
+          attribute="class"       // uses class="dark"
+          defaultTheme="system"   // follow OS by default
+          enableSystem
+          disableTransitionOnChange
+        >
+          <HeaderGate />
+          {children}
+          <Footer />
+        </ThemeProvider>
       </body>
     </html>
   );
