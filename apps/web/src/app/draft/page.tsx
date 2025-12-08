@@ -647,8 +647,12 @@ const isGuest = !user;
     }
 
     // initialize styling
-    const inputBase = "w-full rounded-lg border border-slate-300 bg-black px-3 py-3 text-base md:py-2.5 md:text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
-    const labelBase = "text-sm text-neutral-800 font-medium";
+    const inputBase =
+      "w-full rounded-lg border border-input bg-background text-foreground " +
+      "px-3 py-3 text-base md:py-2.5 md:text-sm shadow-sm " +
+      "focus:outline-none focus:ring-2 focus:ring-primary";
+
+    const labelBase = "text-sm font-medium text-foreground";
 
     // set API location
     const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -1198,7 +1202,7 @@ const isGuest = !user;
             />
             <link rel="canonical" href="https://resume-bender.seanhing.co/draft" />
         </Head>
-        <main className="p-4 md:p-8 space-y-4">
+        <main className="min-h-screen bg-background text-foreground p-4 md:p-8 space-y-4">
             <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
             {showReferralPrompt && (
               <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 mb-4">
@@ -1253,7 +1257,7 @@ const isGuest = !user;
                         onClick={() => setShowTut(true)}
                         title="Open tutorial"
                         aria-label="Open tutorial"
-                        className="rounded-full border px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        className="rounded-full border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
                       >
                         ?
                       </button>
@@ -1278,7 +1282,7 @@ const isGuest = !user;
                   </div>
                 </div>
 
-                <div className="bg-white border rounded-2xl shadow-sm p-4 md:p-6">
+                <div className="rounded-2xl border border-border bg-card shadow-sm p-4 md:p-6">
                     <form className="grid grid-cols-1 gap-4 md:gap-6" onSubmit={(e) => e.preventDefault()}>
                         <div className="space-y-2">
                           <label htmlFor="url" className={labelBase}>Job URL</label>
@@ -1332,9 +1336,14 @@ const isGuest = !user;
                                   const st = taskStatus[opt.key]?.phase;
                                   const details = TASK_DETAILS[opt.key]; 
                                   return (
-                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 relative overflow-visible rounded-2xl p-3 ring-1 ring-black/10 text-sm text-neutral-800 ${
-                                                                        lockedForGuest ? "cursor-not-allowed bg-neutral-100 text-neutral-400 ring-1 ring-neutral-200" : "cursor-pointer"
-                                                                      }`}>
+                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 relative overflow-visible
+                                                                      rounded-2xl border bg-card p-3 text-sm text-foreground shadow-sm
+                                                                      ${
+                                                                        lockedForGuest
+                                                                          ? "cursor-not-allowed opacity-100"
+                                                                          : "cursor-pointer hover:bg-muted"
+                                                                      }`}
+                                      >
                                           <input
                                               type="checkbox"
                                               className="h-4 w-4 rounded border-slate-300"
@@ -1368,7 +1377,7 @@ const isGuest = !user;
 
                                           {/* cost badge */}
                                           {!FREE_MODE &&
-                                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                                                 {details.cost} credits
                                             </span>
                                           }
@@ -1387,7 +1396,7 @@ const isGuest = !user;
                                                 <button
                                                     type="button"
                                                     aria-label={`${opt.label} info`}
-                                                    className="h-5 w-5 inline-flex items-center justify-center rounded-full border text-[10px] text-neutral-700 hover:bg-neutral-100"
+                                                    className="h-5 w-5 inline-flex items-center justify-center rounded-full border border-border bg-card text-[10px] text-muted-foreground hover:bg-muted"
                                                     tabIndex={0}
                                                 >
                                                 i
@@ -1428,7 +1437,10 @@ const isGuest = !user;
                               type="file"
                               accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                               placeholder="Upload Resume File"
-                              className="block w-full text-neutral-800 text-sm file:cursor-pointer file:mr-4 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-neutral-800 hover:file:bg-slate-200"
+                              className="block w-full text-sm text-foreground
+                                        file:cursor-pointer file:mr-4 file:rounded-md file:border-0
+                                        file:bg-muted file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground
+                                        hover:file:bg-muted/80"
                               onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
                           />
                         {/* {resumeFile && <small>Selected: {resumeFile.name}</small>} */}
@@ -1455,16 +1467,19 @@ const isGuest = !user;
                         <button 
                             type="button" 
                             onClick={onGenerateAll}
-                            className="w-full md:w-auto inline-flex justify-center items-center rounded-lg bg-indigo-600 px-5 py-3 text-base md:text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full md:w-auto inline-flex items-center justify-center
+                                      rounded-lg bg-primary px-5 py-3 text-base md:text-sm
+                                      font-medium text-primary-foreground shadow-sm
+                                      hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={!canSubmit}>
                                 {isUnlimited ? (isGenerating ? "Generating…" : "Get Resume Insights")
                                     : (outOfCredits ? "Out of credits" : (isGenerating ? "Generating…" : "Get Resume Insights"))}
                         </button>
                     </form>
                 </div>
-                {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
+                {error && <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
                 {genError && (
-                    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                    <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         {genError}
                     </div>
                 )}
@@ -1562,7 +1577,7 @@ const isGuest = !user;
                                             <BulletsView data={j} />
                                             {/* Optional: keep ATS summary visible under the cards */}
                                             {hasAtsSummary(j) && (
-                                            <div className="rounded-xl border bg-white p-4 shadow-sm">
+                                            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
                                                 <div className="flex items-start gap-4">
                                                 {/* Ring (always try; render only if we have a number) */}
                                                 {(() => {
@@ -1594,7 +1609,7 @@ const isGuest = !user;
                                             )}
                                         </>
                                         ) : (
-                                        <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                        <pre className="whitespace-pre-wrap rounded-xl border border-border bg-card p-4 text-sm font-mono text-foreground">
                                             {formatResult(t, r)}
                                         </pre>
                                         )}
