@@ -1588,8 +1588,8 @@ const isGuest = !user;
                                                 })()}
 
                                                 <div className="flex-1">
-                                                    <h3 className="mb-1 text-sm font-semibold text-neutral-900">ATS summary</h3>
-                                                    <div className="text-sm text-neutral-700 space-y-1">
+                                                    <h3 className="mb-1 text-sm font-semibold text-foreground">ATS summary</h3>
+                                                    <div className="text-sm text-muted-foreground space-y-1">
                                                     {j.ats_summary.covered_keywords?.length ? (
                                                         <div>
                                                         <span className="font-medium">Covered:</span>{" "}
@@ -1651,7 +1651,7 @@ const isGuest = !user;
                                         );
                                     })()
                                 ) : (
-                                <pre className="whitespace-pre-wrap rounded-xl border bg-slate-50 p-4 text-sm font-mono text-slate-800">
+                                <pre className="whitespace-pre-wrap rounded-xl border bg-background p-4 text-sm font-mono text-foreground">
                                     {formatResult(t, r)}
                                 </pre>
                                 )}
