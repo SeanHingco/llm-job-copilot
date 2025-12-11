@@ -22,6 +22,22 @@ class PremiumStatus(TypedDict):
     expires_at: Optional[str]
     days_left: Optional[int]
 
+class Draft(TypedDict):
+    # id: uuid (auto)
+    user_id: str
+    resume_text: str
+    job_description_text: str       # Full text for user display
+    job_description_context: str    # RAG chunks/context used for generation
+    outputs_json: Dict[str, Any]
+    model_version: str
+    # optional metadata
+    company_name: Optional[str]
+    job_title: Optional[str]
+    job_link: Optional[str]
+    resume_label: Optional[str]
+    bender_score: Optional[float] 
+    # created_at, updated_at handled by DB/default
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -275,3 +291,49 @@ async def insert_referral_click(*, code: str, click_id: str, ip: str, ua: str) -
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.post(f"{REST}/referrals", headers=HEADERS, json=payload)
         r.raise_for_status()
+
+async def create_draft(draft: Draft) -> Dict[str, Any]:
+    """
+    Insert a new draft into public.drafts.
+    Returns the created row representation.
+    """
+    headers = {**HEADERS, "Prefer": "return=representation"} 
+    # Ensure user_id is set
+    if not draft.get("user_id"):
+        raise ValueError("create_draft requires user_id")
+
+    payload = {
+        "user_id": draft["user_id"],
+        "resume_text": draft["resume_text"],
+        "job_description_text": draft["job_description_text"],
+        "job_description_context": draft.get("job_description_context") or "",
+        "outputs_json": draft["outputs_json"],
+        "model_version": draft["model_version"],
+        "company_name": draft.get("company_name"),
+        "job_title": draft.get("job_title"),
+        "job_link": draft.get("job_link"),
+        "resume_label": draft.get("resume_label"),
+        "bender_score": draft.get("bender_score"),
+        # created_at/updated_at default to now() in DB
+    }
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{REST}/drafts", headers=headers, json=payload)
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else {}
+
+async def get_drafts(user_id: str, limit: int = 50) -> list[Dict[str, Any]]:
+    """
+    Get drafts for a user, ordered by created_at desc.
+    """
+    params = {
+        "user_id": f"eq.{user_id}",
+        "select": "*",
+        "order": "created_at.desc",
+        "limit": str(limit),
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{REST}/drafts", params=params, headers=HEADERS)
+        r.raise_for_status()
+        return r.json() or []
