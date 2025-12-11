@@ -21,7 +21,7 @@ export default function PercentRing({ value, size = 64, stroke = 8, label }: Pro
           cy={size / 2}
           r={r}
           strokeWidth={stroke}
-          className="text-slate-200"
+          className="text-foreground"
           stroke="currentColor"
           fill="none"
         />
@@ -43,12 +43,12 @@ export default function PercentRing({ value, size = 64, stroke = 8, label }: Pro
           y="50%"
           dominantBaseline="middle"
           textAnchor="middle"
-          className="fill-neutral-800 text-xs"
+          className="fill-foreground text-xs"
         >
           {pct}%
         </text>
       </svg>
-      {label ? <span className="mt-1 text-xs text-neutral-600">{label}</span> : null}
+      {label ? <span className="mt-1 text-xs text-foreground">{label}</span> : null}
     </div>
   );
 }

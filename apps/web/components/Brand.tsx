@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 
-export default function Brand({ className = "", textClassName = "text-neutral-900" }: { className?: string; textClassName?: string; }) {
+export default function Brand({ className = "", textClassName = "text-foreground" }: { className?: string; textClassName?: string; }) {
   return (
     <Link href="/" className={`flex items-center gap-2 ${className}`} aria-label="Resume Bender home">
       <Image

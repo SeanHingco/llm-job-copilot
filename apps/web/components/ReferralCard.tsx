@@ -40,7 +40,7 @@ export default function ReferralCard({
   return (
     <section
       className={[
-        "rounded-3xl border border-white/10 bg-white/5 backdrop-blur",
+        "rounded-3xl border bg-background/5 backdrop-blur",
         "p-5 md:p-7",
         className,
       ].join(" ")}
@@ -49,7 +49,7 @@ export default function ReferralCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-white">
+          <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">
             Like Resume Bender? Invite friends, become an Early Contributor!
           </h2>
 
@@ -61,7 +61,7 @@ export default function ReferralCard({
         </div>
 
         <div
-          className="shrink-0 rounded-full border border-white/20 px-2.5 py-1 text-xs font-medium text-white/80"
+          className="shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium text-foreground/80"
           aria-label={`Progress ${clamped}/${goal}`}
         >
           {clamped}/{goal}
@@ -73,13 +73,13 @@ export default function ReferralCard({
         <input
           readOnly
           value={referralUrl}
-          className="w-full rounded-xl border border-white/10 bg-white/8 px-3.5 py-2.5 text-sm text-white placeholder-white/50 outline-none focus:border-white/30"
+          className="w-full rounded-xl border bg-background/8 px-3.5 py-2.5 text-sm text-foreground placeholder-foreground/50 outline-none focus:border-ring/30"
           placeholder="Your referral link"
         />
         <button
           type="button"
           onClick={onCopy}
-          className="rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-sm font-medium text-white hover:bg-white/15 active:bg-white/20"
+          className="rounded-xl border bg-background/90 px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-muted/90 active:bg-background"
         >
           Copy
         </button>
@@ -87,7 +87,7 @@ export default function ReferralCard({
 
       {/* Progress */}
       <div className="mt-4">
-        <div className="h-2 w-full rounded-full bg-white/15">
+        <div className="h-2 w-full rounded-full bg-background/15">
           <div
             className="h-2 rounded-full bg-indigo-500 transition-[width] duration-300"
             style={{ width: `${pct}%` }}
@@ -97,7 +97,7 @@ export default function ReferralCard({
             role="progressbar"
           />
         </div>
-        <p className="mt-2 text-base md:text-sm text-white/80">
+        <p className="mt-2 text-base md:text-sm text-foreground/80">
           {hasUnlocked
             ? "You’ve unlocked the Early Contributor badge. Thanks for supporting Resume Bender early ❤️"
             : `${remaining} more = Early Contributor badge`}
@@ -106,13 +106,13 @@ export default function ReferralCard({
 
       {/* Info tiles */}
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-sm text-white/70">Template credits</div>
-          <div className="mt-1 text-2xl font-semibold text-white">{templateCredits}</div>
+        <div className="rounded-2xl border border-border/90 bg-background/5 p-4">
+          <div className="text-sm text-foreground/70">Template credits</div>
+          <div className="mt-1 text-2xl font-semibold text-foreground">{templateCredits}</div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-sm text-white/70">Premium</div>
-          <div className="mt-1 text-lg font-medium text-white/90">
+        <div className="rounded-2xl border border-border/90 bg-background/90 p-4">
+          <div className="text-sm text-foreground/70">Premium</div>
+          <div className="mt-1 text-lg font-medium text-foreground/90">
             {premium?.active ? `Active until ${expiresLabel}` : "Not active"}
           </div>
         </div>
@@ -145,10 +145,10 @@ function SmallBtn({
       onClick={onClick}
       className={[
         "h-10 rounded-xl px-3.5 text-sm font-medium",
-        "border border-white/12 text-white",
+        "border border-foreground text-foreground",
         disabled
-          ? "bg-white/5 text-white/40 cursor-not-allowed"
-          : "bg-white/10 hover:bg-white/15 active:bg-white/20",
+          ? "bg-background/10 text-foreground/40 cursor-not-allowed"
+          : "bg-background/5 hover:bg-foreground/15 active:bg-foreground/20",
       ].join(" ")}
     >
       {label}

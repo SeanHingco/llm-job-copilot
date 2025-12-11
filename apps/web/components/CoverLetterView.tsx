@@ -69,29 +69,29 @@ export default function CoverLetterView({ data }: { data: CoverJSON }) {
 
       {/* View / Edit */}
       {editing ? (
-        <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm">
-          <label className="text-sm font-medium text-slate-600 ">
+        <div className="grid gap-3 rounded-xl border bg-background p-4 shadow-sm">
+          <label className="text-sm font-medium text-foreground">
             Subject
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-600 text-sm"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-muted-foreground text-sm"
               value={local.subject}
               onChange={(e) => setLocal({ ...local, subject: e.target.value })}
             />
           </label>
 
-          <label className="text-sm font-medium text-slate-600 ">
+          <label className="text-sm font-medium text-foreground ">
             Greeting
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-600 text-sm"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-muted-foreground text-sm"
               value={local.greeting}
               onChange={(e) => setLocal({ ...local, greeting: e.target.value })}
             />
           </label>
 
-          <label className="text-sm font-medium text-slate-600 ">
+          <label className="text-sm font-medium text-muted-foreground ">
             Body paragraphs (one per line)
             <textarea
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-600 text-sm"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-muted-foreground text-sm"
               rows={6}
               value={local.body_paragraphs.join("\n")}
               onChange={(e) =>
@@ -101,18 +101,18 @@ export default function CoverLetterView({ data }: { data: CoverJSON }) {
           </label>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-600">
+            <label className="text-sm font-medium text-muted-foreground">
               Valediction
               <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-600 text-sm"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-muted-foreground text-sm"
                 value={local.valediction}
                 onChange={(e) => setLocal({ ...local, valediction: e.target.value })}
               />
             </label>
-            <label className="text-sm font-medium text-slate-600">
+            <label className="text-sm font-medium text-muted-foreground">
               Signature
               <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-600 text-sm"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-muted-foreground text-sm"
                 value={local.signature}
                 onChange={(e) => setLocal({ ...local, signature: e.target.value })}
               />
@@ -120,11 +120,11 @@ export default function CoverLetterView({ data }: { data: CoverJSON }) {
           </div>
         </div>
       ) : (
-        <article className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Subject</div>
-          <h3 className="text-base font-semibold text-neutral-900">{local.subject}</h3>
+        <article className="rounded-xl border bg-background p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Subject</div>
+          <h3 className="text-base font-semibold text-foreground">{local.subject}</h3>
 
-          <div className="mt-4 space-y-4 text-neutral-800">
+          <div className="mt-4 space-y-4 text-foreground">
             <p>{local.greeting}</p>
             {local.body_paragraphs.map((p, i) => (
               <p key={i}>{p}</p>

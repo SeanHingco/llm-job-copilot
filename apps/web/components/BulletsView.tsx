@@ -56,7 +56,7 @@ export default function BulletsView({ data }: { data: unknown }): ReactNode | nu
         <button
           type="button"
           onClick={copyAll}
-          className="rounded-md border px-2 py-1 bg-purple-400 text-xs text-neutral-700 hover:bg-neutral-50"
+          className="rounded-md border px-2 py-1 bg-background text-xs text-foreground hover:bg-muted"
           aria-label="Copy all bullets"
         >
           Copy all
@@ -64,15 +64,15 @@ export default function BulletsView({ data }: { data: unknown }): ReactNode | nu
       </div>
 
       {bullets.map((b, i) => (
-        <article key={i} className="rounded-xl border bg-white p-4 shadow-sm">
+        <article key={i} className="rounded-xl border bg-background p-4 shadow-sm">
           <div className="flex items-start gap-2">
-            <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-neutral-300" />
+            <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-background" />
             <div className="flex-1">
-              <h3 className="font-medium text-neutral-900">{b.text}</h3>
+              <h3 className="font-medium text-foreground">{b.text}</h3>
 
               {/* sub details */}
               {(b.evidence || b.rationale) && (
-                <p className="mt-1 text-sm text-neutral-600">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {b.evidence && <><span className="font-medium">evidence:</span> {b.evidence}</>}
                   {b.evidence && b.rationale ? " • " : ""}
                   {b.rationale && <><span className="font-medium">why:</span> {b.rationale}</>}
@@ -106,7 +106,7 @@ export default function BulletsView({ data }: { data: unknown }): ReactNode | nu
               onClick={async () => {
                 try { await navigator.clipboard.writeText(b.text); } catch {}
               }}
-              className="ml-2 rounded-md border px-2 py-1 text-xs text-neutral-700 hover:bg-blue-50"
+              className="ml-2 rounded-md border px-2 py-1 text-xs text-foreground hover:bg-foreground/10"
               aria-label="Copy bullet"
               title="Copy bullet"
             >

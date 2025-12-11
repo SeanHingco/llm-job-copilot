@@ -15,7 +15,7 @@ const link = (href: string, label: string, cur: string) => (
     href={href}
     className={[
       'px-2 py-1 rounded-md text-sm',
-      cur.startsWith(href) ? 'bg-neutral-200 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'
+      cur.startsWith(href) ? 'bg-background text-foreground' : 'text-foreground hover:bg-background'
     ].join(' ')}
   >
     {label}
@@ -55,7 +55,7 @@ export default function AppHeader() {
   }, [open]);
 
   return hide ? null : (
-    <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="relative mx-auto max-w-5xl px-4 py-3 flex items-center gap-3 justify-between">
         <Brand />
         {/* Mobile overflow menu trigger */}
