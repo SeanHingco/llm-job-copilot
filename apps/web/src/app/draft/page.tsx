@@ -23,7 +23,7 @@ import Head from 'next/head';
 const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === 'true';
 
 // types
-type Task = "bullets" | "talking_points" | "cover_letter" | "alignment" | "bender_score";
+type Task = "bullets" | "talking_points" | "cover_letter" | "alignment" | "bender_score" | "first_impression";
 
 const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
   bullets: { guestAllowed: true },
@@ -31,6 +31,7 @@ const TASK_ACCESS: Record<Task, { guestAllowed: boolean }> = {
   cover_letter: { guestAllowed: false },
   alignment: { guestAllowed: false },
   bender_score: { guestAllowed: false },
+  first_impression: { guestAllowed: false },
 };
 
 // type Meta = { remaining_credits?: number };
@@ -163,6 +164,7 @@ const TASK_OPTIONS: { key: Task; label: string }[] = [
   { key: "cover_letter",    label: "Cover Letter" },
   { key: "alignment",       label: "Alignment" },
   { key: "bender_score",    label: "Bender Score (beta)" },
+  { key: "first_impression", label: "First Impression (beta)" },
 ];
 
 const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
@@ -184,6 +186,10 @@ const TASK_DETAILS: Record<Task, { info: string; cost: number }> = {
   },
   bender_score: {
     info: "Prototype overall fit score using ATS, experience, CAR quality, and more.",
+    cost: 1,
+  },
+  first_impression: {
+    info: "Simulated recruiter skim: what stands out in 10–15 seconds.",
     cost: 1,
   },
 };
@@ -1550,8 +1556,10 @@ const isGuest = !user;
                         const title =
                             t === "bullets" ? "Resume Bullets" :
                             t === "talking_points" ? "Talking Points" :
-                            t === "cover_letter" ? "Cover Letter" : "Alignment"
+                            t === "cover_letter" ? "Cover Letter" :
+                            t === "alignment" ? "Alignment" :
                             t === "bender_score" ? "Bender Score (beta)" :
+                            t === "first_impression" ? "First Impression (beta)" :
                             t;
                         return (
                             <section key={t}>

@@ -8,7 +8,6 @@ from langchain.tools import tool
 from langchain.agents import create_agent
 
 # --- Output schema ---
-
 class BenderScoreOut(BaseModel):
     ats_alignment: float
     experience_fit: float
