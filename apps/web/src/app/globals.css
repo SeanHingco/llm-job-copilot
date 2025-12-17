@@ -1,71 +1,214 @@
 @import "tailwindcss";
 
-/* ------------------------------------------------------------
-   Light Theme (default)
------------------------------------------------------------- */
+/* ---------------------------------------------
+  Base semantic tokens (theme-agnostic structure)
+  You’ll override these per theme.
+---------------------------------------------- */
 :root {
-  /* Base background + text */
+  /* Core */
   --background: #ffffff;
-  --foreground: #020817;
+  --foreground: #0b1220;
 
-  /* Surfaces */
   --card: #ffffff;
-  --card-foreground: #020817;
+  --card-foreground: #0b1220;
 
-  /* Muted / subtle */
+  --popover: #ffffff;
+  --popover-foreground: #0b1220;
+
   --muted: #f4f4f5;
   --muted-foreground: #71717a;
 
-  /* Borders / inputs / ring */
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #0f172a;
 
-  /* Brand / primary */
+  /* Brand + supporting */
   --primary: #5c1174;
-  --primary-foreground: #eff6ff;
+  --primary-foreground: #f8fafc;
 
-  /* Destructive (errors) */
+  --secondary: #f3e8ff;
+  --secondary-foreground: #2a0a36;
+
+  --accent: #ede9fe;
+  --accent-foreground: #1f0a2a;
+
+  /* Status */
   --destructive: #ef4444;
-  --destructive-foreground: #fef2f2;
+  --destructive-foreground: #fff1f2;
+
+  --success: #16a34a;
+  --success-foreground: #ecfdf5;
+
+  --warning: #f59e0b;
+  --warning-foreground: #0b1220;
+
+  --info: #2563eb;
+  --info-foreground: #eff6ff;
+
+  /* Shape + depth */
+  --radius: 16px;
+  --shadow: 0 10px 30px rgba(2, 6, 23, 0.10);
+  --shadow-strong: 0 20px 60px rgba(2, 6, 23, 0.18);
+
+  /* “Art direction” tokens */
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(92,17,116,0.20), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(37,99,235,0.12), transparent 55%);
+  --pattern: none; /* you can override with a subtle pattern */
+  --noise-opacity: 0.06;
+
+  /* Optional RGB helpers for alpha usage */
+  --primary-rgb: 92 17 116;
+  --foreground-rgb: 11 18 32;
 }
 
-/* ------------------------------------------------------------
-   Dark Theme (activated by adding: <html class="dark">)
------------------------------------------------------------- */
+/* ---------------------------------------------
+  DARK (default dark)
+---------------------------------------------- */
 html.dark {
   color-scheme: dark;
 
   --background: #020617;
   --foreground: #e5e7eb;
 
-  --card: #130217;
+  --card: #0b0a12;
   --card-foreground: #e5e7eb;
+
+  --popover: #0b0a12;
+  --popover-foreground: #e5e7eb;
 
   --muted: #111827;
   --muted-foreground: #9ca3af;
 
-  --border: #1f2933;
-  --input: #1f2933;
-  --ring: #7d1095;
+  --border: #1f2937;
+  --input: #1f2937;
+  --ring: #a855f7;
 
   --primary: #8c1bb1;
   --primary-foreground: #0b1120;
 
+  --secondary: #1b0b24;
+  --secondary-foreground: #f5d0fe;
+
+  --accent: #1c1630;
+  --accent-foreground: #e9d5ff;
+
   --destructive: #b91c1c;
   --destructive-foreground: #fee2e2;
+
+  --success: #22c55e;
+  --success-foreground: #052e16;
+
+  --warning: #fbbf24;
+  --warning-foreground: #111827;
+
+  --info: #60a5fa;
+  --info-foreground: #0b1220;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-strong: 0 30px 80px rgba(0, 0, 0, 0.45);
+
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(140,27,177,0.22), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(96,165,250,0.12), transparent 55%);
+
+  --primary-rgb: 140 27 177;
+  --foreground-rgb: 229 231 235;
 }
 
-/* ------------------------------------------------------------
-   Tailwind Theme Tokens — Makes bg-background, text-foreground, etc. work
------------------------------------------------------------- */
+/* ---------------------------------------------
+  ELEMENT THEMES
+  Use: <html data-theme="fire">, etc.
+  These can be combined with dark mode if you want:
+    html.dark[data-theme="fire"] { ... }
+---------------------------------------------- */
+
+/* FIRE: punchy, warm, energetic */
+html[data-theme="fire"] {
+  --primary: #ff3d00;
+  --primary-foreground: #0b1220;
+  --secondary: #fff1e6;
+  --secondary-foreground: #3b1306;
+
+  --accent: #ffe3d6;
+  --accent-foreground: #2a0f08;
+
+  --ring: #ff7a45;
+
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(255,61,0,0.22), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(245,158,11,0.16), transparent 55%);
+  --pattern: none;
+
+  --primary-rgb: 255 61 0;
+}
+
+/* WATER: clean, calm, glossy */
+html[data-theme="water"] {
+  --primary: #0ea5e9;
+  --primary-foreground: #06121a;
+  --secondary: #e0f2fe;
+  --secondary-foreground: #08212d;
+
+  --accent: #dbeafe;
+  --accent-foreground: #0b1f2a;
+
+  --ring: #38bdf8;
+
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(14,165,233,0.22), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(59,130,246,0.14), transparent 55%);
+  --pattern: none;
+
+  --primary-rgb: 14 165 233;
+}
+
+/* EARTH: grounded, natural, tactile */
+html[data-theme="earth"] {
+  --primary: #16a34a;            /* forest */
+  --primary-foreground: #06120b;
+  --secondary: #ecfdf5;          /* mint */
+  --secondary-foreground: #052e16;
+
+  --accent: #fef3c7;             /* sand */
+  --accent-foreground: #1f2937;
+
+  --ring: #84cc16;
+
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(22,163,74,0.18), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(245,158,11,0.12), transparent 55%);
+  --pattern: none;
+
+  --primary-rgb: 22 163 74;
+}
+
+/* AIR: light, airy, slightly “electric” */
+html[data-theme="air"] {
+  --primary: #a855f7;            /* violet */
+  --primary-foreground: #0b1220;
+  --secondary: #f5f3ff;
+  --secondary-foreground: #2e1065;
+
+  --accent: #e0e7ff;             /* periwinkle */
+  --accent-foreground: #111827;
+
+  --ring: #c084fc;
+
+  --gradient-hero: radial-gradient(1200px circle at 20% 10%, rgba(168,85,247,0.22), transparent 55%),
+                   radial-gradient(900px circle at 80% 30%, rgba(99,102,241,0.14), transparent 55%);
+  --pattern: none;
+
+  --primary-rgb: 168 85 247;
+}
+
+/* ---------------------------------------------
+  Tailwind token bindings (your existing approach)
+---------------------------------------------- */
 @theme inline {
-  /* Bind Tailwind tokens to CSS variables */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
@@ -77,19 +220,51 @@ html.dark {
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
 
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
 
-  /* Fonts — already configured */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  --radius: var(--radius);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-/* ------------------------------------------------------------
-   Base styles
------------------------------------------------------------- */
+/* ---------------------------------------------
+  Base styles + easy “graphics”
+---------------------------------------------- */
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Add a reusable hero background utility */
+.theme-hero {
+  background-image: var(--gradient-hero);
+}
+
+/* Optional subtle noise overlay (cheap “premium” feel) */
+.noise::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
 }

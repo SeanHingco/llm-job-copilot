@@ -660,6 +660,26 @@ const isGuest = !user;
 
     const labelBase = "text-sm font-medium text-foreground";
 
+    const bannerBase =
+  "rounded-2xl border px-4 py-3 text-sm flex flex-col gap-3 md:flex-row md:items-center md:justify-between";
+
+  const bannerInfo = "border-info/25 bg-info/10 text-info";
+  const bannerSuccess = "border-success/25 bg-success/10 text-success";
+  const bannerWarn = "border-warning/25 bg-warning/10 text-warning";
+  const bannerError = "border-destructive/25 bg-destructive/10 text-destructive";
+
+  const bannerBtnBase =
+    "rounded-md px-3 py-1.5 text-xs font-medium border transition-colors";
+
+  const cardBase =
+    "flex flex-wrap items-center justify-between gap-2 relative overflow-visible rounded-2xl border p-3 text-sm shadow-sm transition";
+  const cardUnlocked =
+    "cursor-pointer bg-card hover:bg-muted border-border";
+  const cardLocked =
+    "cursor-not-allowed bg-card/60 border-border opacity-80";
+  const cardSelected =
+    "border-primary/40 ring-2 ring-primary/25 bg-accent";
+
     // set API location
     const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -681,79 +701,6 @@ const isGuest = !user;
     }
 
     const isPremium = Boolean(premium?.active);
-    
-
-    // async function onExtract() {
-    //     setError(""); setStatus(""); setProbablyScanned(false);
-    //     if (!resumeFile) { setError("Select a .pdf or .txt first."); return; }
-
-    //     setIsExtracting(true);
-    //     try {
-    //         const fd = new FormData();
-    //         fd.append("file", resumeFile);
-
-    //         const res = await apiFetch(`/resume/extract`, {
-    //         method: 'POST',
-    //         body: fd
-    //         });
-
-    //         const data: any = (res as any).data || null;
-
-    //         if (!res.ok) {
-    //         const msg = data?.detail || `Extract failed (${res.status})`;
-    //         setError(msg);
-    //         return;
-    //         }
-
-    //         setResumeText(data?.text ?? "");
-    //         setStatus(`Extracted • ${data?.text_length ?? 0} chars`);
-    //         setProbablyScanned(Boolean(data?.probably_scanned));
-    //     } catch (e: any){
-    //         setError(e?.message || "Network error");
-    //     } finally {
-    //         setIsExtracting(false);
-    //     }
-    // }
-
-    // async function onGenerate() {
-    //     setGenError(""); setBullets("");
-    //     if (!url) { setGenError("Enter a job URL first."); return; }
-
-    //     setIsGenerating(true);
-    //     try {
-    //         const body = { url, q: q || null, job_title: jobTitle || null, resume: resumeText || "" };
-
-    //         const res = await apiFetch(`/draft/run`, {       // <-- remove ${API}
-    //         method: "POST",
-    //         headers: { "content-type": "application/json" },
-    //         body: JSON.stringify(body),
-    //         });
-
-    //         const data: any = (res as any).data || null;     // <-- read once
-
-    //         // update credits if present
-    //         const nextCredits = data?.meta?.remaining_credits;
-    //         if (typeof nextCredits === 'number') setCredits(nextCredits);
-    //         if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
-
-    //         if (!res.ok) {
-    //             // optional: show upgrade banner on 402
-    //             if (res.status === 402) {
-    //                 setUpgradeMsg(
-    //                     asText(data?.detail ?? data) || "You’re out of credits. Upgrade to continue."
-    //                 );
-    //                 }
-    //                 setGenError(errorToMessage(res.status, data));
-    //             return;
-    //         }
-
-    //         setBullets(data?.bullets ?? "");
-    //     } catch (e: any){
-    //         setGenError(e?.message || "Network error");
-    //     } finally {
-    //         setIsGenerating(false);
-    //     }
-    // }
 
     function maybeShowReferralNudge() {
       try {
@@ -1208,7 +1155,7 @@ const isGuest = !user;
             />
             <link rel="canonical" href="https://resume-bender.seanhing.co/draft" />
         </Head>
-        <main className="min-h-screen bg-background text-foreground p-4 md:p-8 space-y-4">
+        <main className="min-h-screen bg-background text-foreground theme-hero noise p-4 md:p-8 space-y-4">
             <TutorialModal open={showTut} onClose={() => {markTutorialSeen(); setShowTut(false);}} />
             {showReferralPrompt && (
               <div className="mx-auto w-full max-w-[680px] md:max-w-3xl px-4 mb-4">
@@ -1219,13 +1166,13 @@ const isGuest = !user;
                       Fan of Resume Bender? Refer a friend and get exclusive early access to new features!
                     </p>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className={`${bannerBase} ${bannerInfo}`}>
                     <button
                       type="button"
                       onClick={() => {
                         setShowReferralPrompt(false);
                       }}
-                      className="rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100"
+                      className={`${bannerBtnBase} border-border bg-card text-foreground hover:bg-muted`}
                     >
                       Maybe later
                     </button>
@@ -1235,7 +1182,7 @@ const isGuest = !user;
                         setShowReferralPrompt(false);
                         router.push("/account#referrals");
                       }}
-                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                      className={`${bannerBtnBase} border-transparent bg-primary text-primary-foreground hover:bg-primary/90`}
                     >
                       Go to referrals
                     </button>
@@ -1252,7 +1199,7 @@ const isGuest = !user;
                     <div className="flex items-center gap-2">
                       {isGuest && (
                         <Tooltip content="Guest mode: You can generate resume bullets as a guest. Sign up to unlock the full toolkit.">
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                          <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
                             Guest mode
                           </span>
                         </Tooltip>
@@ -1342,17 +1289,15 @@ const isGuest = !user;
                                   const st = taskStatus[opt.key]?.phase;
                                   const details = TASK_DETAILS[opt.key]; 
                                   return (
-                                      <label key={opt.key} className={`flex flex-wrap items-center justify-between gap-2 relative overflow-visible
-                                                                      rounded-2xl border bg-card p-3 text-sm text-foreground shadow-sm
-                                                                      ${
-                                                                        lockedForGuest
-                                                                          ? "cursor-not-allowed opacity-100"
-                                                                          : "cursor-pointer hover:bg-muted"
-                                                                      }`}
+                                      <label key={opt.key} className={[
+                                              cardBase,
+                                              lockedForGuest ? cardLocked : cardUnlocked,
+                                              checked ? cardSelected : "",
+                                            ].join(" ")}
                                       >
                                           <input
                                               type="checkbox"
-                                              className="h-4 w-4 rounded border-slate-300"
+                                              className="h-4 w-4 rounded border border-border accent-[color:var(--primary)]"
                                               checked={checked}
                                               onChange={() => {
                                                 if (lockedForGuest) return;
@@ -1495,7 +1440,7 @@ const isGuest = !user;
                   typeof credits === 'number' &&
                   credits <= 0 &&
                   !upgradeMsg && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    <div className={`${bannerBase} ${bannerWarn}`}>
                       You’re out of credits. <a className="underline" href="/account/billing">Upgrade</a> to continue.
                     </div>
                 )}
