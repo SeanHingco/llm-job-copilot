@@ -55,7 +55,9 @@ export function ThemeToggle() {
       {/* Element palette */}
       <select
         value={elementTheme}
-        onChange={(e) => setElementTheme(e.target.value as any)}
+        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+          setElementTheme(e.target.value as ElementTheme)
+        }
         className="rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground shadow-sm hover:bg-muted"
         aria-label="Select elemental theme"
       >
