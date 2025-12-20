@@ -12,9 +12,11 @@ from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
 from app.routers.resume import extract_resume as extract_route
 from app.agents.bender_score import run_bender_score_agent
+from app.agents.domain.first_impression import first_impression_domain
+from app.agents.schemas.first_impression_schema import FirstImpressionInput
 
 from app.auth import verify_supabase_session as verify_user
-from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event
+from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event, create_draft, get_drafts, Draft
 
 import os
 from pathlib import Path
@@ -24,10 +26,10 @@ import re
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
-Task = Literal["bullets", "talking_points", "cover_letter", "alignment", "bender_score"]
+Task = Literal["bullets", "talking_points", "cover_letter", "alignment", "bender_score", "first_impression"]
 PROMPT_DIR = Path(__file__).resolve().parents[4] / "ml" / "prompts"
 RL_RUN_FORM_PER_MIN = int(os.getenv("RL_RUN_FORM_PER_MIN", "10"))
-REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment", "bender_score"}
+REQUIRES_JOB: set[Task] = {"bullets", "talking_points", "cover_letter", "alignment", "bender_score", "first_impression"}
 FREE_MODE = os.getenv("FREE_MODE", "true").lower() == "true"
 
 NEG_PATTERNS = [
@@ -192,6 +194,50 @@ async def _run_generation(req: DraftReq) -> dict:
                 "task": "bender_score",
                 "final_url": result.get("final_url"),
             },
+            # Pass these up so we can save the draft
+            "full_text": result.get("full_text"),
+            "context": context,
+            "job_title": job_title,
+        }
+
+    if req.task == "first_impression":
+        # Use pasted job_text if available; otherwise fall back to context from ingest
+        job_text = (req.job_text or "").strip() or context
+        resume_text = (req.resume or "").strip()
+
+        if not resume_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read your resume. Paste text or upload a file.",
+            )
+        if not job_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide a job URL or paste the job description to run First Impression.",
+            )
+
+        # Run the First-Impression “agent”
+        fi_input = FirstImpressionInput(
+            resume_text=resume_text,
+            job_text=job_text,
+            bullets=None,  # or pass actual bullets later
+        )
+        fi = first_impression_domain(
+            fi_input
+        )
+
+        # Return in a JSON-friendly shape similar to bender_score
+        return {
+            "output_json": fi.model_dump(),
+            "prompt": "",  # not prompt-based, it’s an orchestrated pipeline
+            "meta": {
+                "task": "first_impression",
+                "final_url": result.get("final_url"),
+            },
+            # For persistence / future use
+            "full_text": result.get("full_text"),
+            "context": context,
+            "job_title": job_title,
         }
 
 
@@ -226,6 +272,10 @@ async def _run_generation(req: DraftReq) -> dict:
             "context_chars": result.get("context_chars"),
             "title_from_page": result.get("title"),
         },
+        # Pass these up so we can save the draft
+        "full_text": result.get("full_text"),
+        "context": context,
+        "job_title": job_title,
     }
 
 def _is_readable(s: str) -> bool:
@@ -664,6 +714,46 @@ async def draft_run_form(
         )
 
     data["meta"]["remaining_credits"] = remaining
+
+    # 8) Save draft to DB persistence
+    # We only save if successful (which it is if we reached here)
+    # Background this? Or await? Await is safer for now to ensure it works.
+    try:
+        draft_payload: Draft = {
+            "user_id": user_id,
+            "resume_text": resume_text,
+            "job_description_text": data.get("full_text") or "",
+            "job_description_context": data.get("context") or "",
+            "outputs_json": data.get("bullets") if task == "bullets" else data, # Store the whole thing or specific part? 
+            # Ideally store the result. For bullets, "bullets" key has the text.
+            # For bender, "output_json" has it.
+            # Let's standardize: store the whole 'data' minus the repetitive text fields if we want,
+            # or just store "outputs_json" as the 'data'.
+            # The schema says outputs_json is jsonb.
+            "model_version": data["meta"].get("model") or "unknown",
+            "company_name": None, # todo: extract from text?
+            "job_title": data.get("job_title") or job_title,
+            "job_link": str(req.url) if req.url else None,
+            "resume_label": None,
+            "bender_score": data["output_json"]["final_bender_score"] if task == "bender_score" and "output_json" in data else None
+        }
+
+        # Clean up data for frontend response if needed, OR just save what we have.
+        # But wait, create_draft expects 'outputs_json'.
+        if task == "bullets":
+             draft_payload["outputs_json"] = {"bullets": data.get("bullets")}
+        elif task == "bender_score":
+             draft_payload["outputs_json"] = data.get("output_json")
+        else:
+             # generic fallback
+             draft_payload["outputs_json"] = data
+
+        await create_draft(draft_payload)
+    except Exception as e:
+        print(f"Failed to save draft: {e}")
+        # Validate if we should fail the request or just log. usually log is better for aux persistence.
+        # But user might expect it saved. Let's log for now to avoids blocking the main response.
+    
     return data
 
 

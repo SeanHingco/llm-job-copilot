@@ -364,6 +364,7 @@ async def ingest(req: IngestRequest):
         "query_preview": req.q or "",
         "title": title,
         "preview": preview,
+        "full_text": text, # NEW: full text for persistence
     }
 
     

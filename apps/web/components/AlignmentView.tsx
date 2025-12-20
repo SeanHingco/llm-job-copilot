@@ -19,45 +19,45 @@ export default function AlignmentView({ data }: { data: AlignJSON }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-4 rounded-xl border bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-4 rounded-xl border bg-card p-4 shadow-sm">
         <PercentRing value={Math.max(0, Math.min(100, Math.round(coverage)))} label="Coverage" />
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-neutral-900">Summary</h3>
-          <p className="text-sm text-neutral-700 mt-1 whitespace-pre-wrap">{summary}</p>
+          <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{summary}</p>
           {missing_keywords?.length ? (
-            <p className="text-sm text-neutral-700 mt-2">
-              <span className="font-medium">Missing keywords:</span> {missing_keywords.join(", ")}
+            <p className="text-sm text-muted-foreground mt-2">
+              <span className="font-medium"><b>Missing keywords:</b></span> {missing_keywords.join(", ")}
             </p>
           ) : null}
         </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-neutral-900 mb-2">Strengths</h4>
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <h4 className="text-sm font-semibold text-foreground mb-2">Strengths</h4>
           <ul className="space-y-2">
             {strengths.map((s, i) => (
-              <li key={`str-${i}`} className="text-sm text-neutral-800">
+              <li key={`str-${i}`} className="text-sm text-muted-foreground">
                 <div className="font-medium">• {s.requirement}</div>
                 {s.evidence_resume ? (
-                  <div className="text-neutral-600 mt-0.5">evidence: {s.evidence_resume}</div>
+                  <div className="text-muted-foreground mt-0.5">evidence: {s.evidence_resume}</div>
                 ) : null}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-neutral-900 mb-2">Gaps</h4>
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <h4 className="text-sm font-semibold text-foreground mb-2">Gaps</h4>
           <ul className="space-y-2">
             {gaps.map((g, i) => (
-              <li key={`gap-${i}`} className="text-sm text-neutral-800">
+              <li key={`gap-${i}`} className="text-sm text-muted-foreground">
                 <div className="font-medium">• {g.requirement}</div>
                 {g.why_it_matters ? (
-                  <div className="text-neutral-600 mt-0.5">why it matters: {g.why_it_matters}</div>
+                  <div className="text-muted-foreground mt-0.5">why it matters: {g.why_it_matters}</div>
                 ) : null}
                 {g.suggested_edit ? (
-                  <div className="text-neutral-600 mt-0.5 whitespace-pre-wrap">suggested: {g.suggested_edit}</div>
+                  <div className="text-muted-foreground mt-0.5 whitespace-pre-wrap"><b>suggested: </b>{g.suggested_edit}</div>
                 ) : null}
               </li>
             ))}
@@ -66,11 +66,11 @@ export default function AlignmentView({ data }: { data: AlignJSON }) {
       </div>
 
       {questions_for_candidate?.length ? (
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-neutral-900 mb-2">Questions for you</h4>
+        <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <h4 className="text-sm font-semibold text-foreground mb-2">Questions for you</h4>
           <ul className="space-y-1">
             {questions_for_candidate.map((q, i) => (
-              <li key={`q-${i}`} className="text-sm text-neutral-800">• {q}</li>
+              <li key={`q-${i}`} className="text-sm text-muted-foreground">• {q}</li>
             ))}
           </ul>
         </div>
