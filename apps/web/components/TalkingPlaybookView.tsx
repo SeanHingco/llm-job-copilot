@@ -21,7 +21,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
   return (
     <div className="space-y-4">
       {/* Strengths */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Strengths</h3>
         <ul className="space-y-3">
           {data.strengths?.map((s, i) => (
@@ -35,7 +35,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
       </section>
 
       {/* Gaps */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Gaps & Mitigations</h3>
         <ul className="space-y-3">
           {data.gaps?.map((g, i) => (
@@ -49,7 +49,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
       </section>
 
       {/* Interview questions */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Likely Interview Questions</h3>
         <ul className="space-y-3">
           {data.interview_questions?.map((q, i) => (
@@ -77,7 +77,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
 
       {/* Summary (optional) */}
       {data.summary && (
-        <section className="rounded-xl border bg-background p-4 shadow-sm">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h3 className="mb-2 text-sm font-semibold text-foreground">Summary</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             {data.summary.overall_strengths?.length ? (

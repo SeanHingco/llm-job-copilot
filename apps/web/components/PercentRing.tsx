@@ -30,7 +30,7 @@ export default function PercentRing({ value, size = 64, stroke = 8, label }: Pro
           cy={size / 2}
           r={r}
           strokeWidth={stroke}
-          className="text-indigo-600"
+          className="text-primary"
           stroke="currentColor"
           fill="none"
           strokeLinecap="round"
