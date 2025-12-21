@@ -19,7 +19,7 @@ export default function AlignmentView({ data }: { data: AlignJSON }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-4 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-[var(--shadow)]">
         <PercentRing value={Math.max(0, Math.min(100, Math.round(coverage)))} label="Coverage" />
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-foreground">Summary</h3>
@@ -34,7 +34,7 @@ export default function AlignmentView({ data }: { data: AlignJSON }) {
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-foreground mb-2">Strengths</h4>
+          <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">Strengths</h4>
           <ul className="space-y-2">
             {strengths.map((s, i) => (
               <li key={`str-${i}`} className="text-sm text-muted-foreground">
@@ -48,7 +48,7 @@ export default function AlignmentView({ data }: { data: AlignJSON }) {
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-foreground mb-2">Gaps</h4>
+          <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">Gaps</h4>
           <ul className="space-y-2">
             {gaps.map((g, i) => (
               <li key={`gap-${i}`} className="text-sm text-muted-foreground">
