@@ -7,6 +7,7 @@ from app.utils.llm import generate_text
 from app.utils.rate_limit import throttle, throttle_multi
 from app.utils.credits import ensure_daily_free_topup
 from app.utils.jd_fetch import fetch_jd_text
+from app.supabase_db import continue_draft, create_draft
 
 from app.routers.ingest import ingest as ingest_route
 from app.routers.ingest import IngestRequest
@@ -19,10 +20,12 @@ from app.auth import verify_supabase_session as verify_user
 from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event, create_draft, get_drafts, Draft
 
 import os
+import uuid
 from pathlib import Path
 from string import Template
 import time
 import re
+import traceback
 
 bearer = HTTPBearer()
 router = APIRouter(prefix="/draft", tags=["draft"])
@@ -53,6 +56,7 @@ class DraftReq(BaseModel):
     job_title: Optional[str] = None
     resume: Optional[str] = ""
     job_text: Optional[str] = None 
+    client_ref_id: Optional[str] = None 
 
 class UserSummary(BaseModel):
     id: str
@@ -282,8 +286,6 @@ def _is_readable(s: str) -> bool:
     s = (s or "").strip()
     if len(s) < 200:               # too short to be a resume
         return False
-    # heuristic: require mostly word-ish characters
-    import re
     letters = len(re.findall(r"[A-Za-z]", s))
     return letters / max(1, len(s)) > 0.20
 
@@ -546,12 +548,22 @@ async def draft_run_form(
     job_title: Optional[str] = Form(None),
     resume: Optional[str] = Form(""),
     resume_file: UploadFile | None = File(None),
-    job_text: Optional[str] = Form(None),    # NEW
+    job_text: Optional[str] = Form(None),
     task: Task = Form("bullets"),
+    client_ref_id: Optional[str] = Form(None), 
     _creds: HTTPAuthorizationCredentials = Security(bearer),
     user=Depends(verify_user)
 ):
     user_id = user["user_id"]
+
+    # Track whether the caller provided a ref; if not, we create the draft on first call.
+    caller_provided_ref = client_ref_id is not None
+
+    # If client_ref_id is not provided, generate one.
+    # Frontend is expected to reuse the returned client_ref_id for
+    # all subsequent tasks (bullets, alignment, cover_letter, etc.)
+    if not client_ref_id:
+        client_ref_id = str(uuid.uuid4())
 
     # 0) Rate limit FIRST (burst + sustained), per user+task
     ok, retry = throttle_multi(f"user:{user_id}:task:{task}")
@@ -574,10 +586,10 @@ async def draft_run_form(
 
     # 1) Load profile / credits ONLY when not in FREE_MODE
     # ----------------------------------------------------
-    is_unlimited = False          # NEW: default values so they're always defined
-    credits = 0                   # NEW
+    is_unlimited = False          # default values so they're always defined
+    credits = 0                   
 
-    if not FREE_MODE:             # NEW: skip all this in free mode
+    if not FREE_MODE:             # skip all this in free mode
         profile: UserSummary = await get_user_summary(user_id)
         is_unlimited = bool(profile.get("unlimited"))
         credits = int(profile.get("free_uses_remaining") or 0)
@@ -646,6 +658,7 @@ async def draft_run_form(
         job_title=job_title,
         resume=resume_text,
         job_text=job_text,
+        client_ref_id=client_ref_id,
     )
 
     # 6) Run generation (optional: add a 2-slot concurrency cap)
@@ -686,73 +699,144 @@ async def draft_run_form(
 
     # 7) Return meta, spending credits only when NOT in FREE_MODE
     # ----------------------------------------------------------
-    # Make sure meta exists so we can safely write into it
-    data.setdefault("meta", {})                   # NEW
+    # Make sure meta exists so we can safely write into it and include client_ref_id for chaining tasks
+    data.setdefault("meta", {})                   
+    if client_ref_id:
+        data["meta"]["client_ref_id"] = client_ref_id
 
     if FREE_MODE:
-        # NEW: Free mode → don't decrement at all, just return a dummy large value
+        # Free mode → don't decrement at all, just return a dummy large value
         data["meta"]["remaining_credits"] = data["meta"].get("remaining_credits", 9999)
         data["meta"]["unlimited"] = bool(is_unlimited)
-        return data
-
-    # Original behavior for paid mode (non-free)
-    if is_unlimited:
+        
+    elif is_unlimited:
         data["meta"]["remaining_credits"] = credits  # unchanged
         data["meta"]["unlimited"] = True
-        return data
 
-    remaining = await consume_free_use(user_id)
-    if remaining < 0:
-        # race: someone else spent last credit in parallel
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "code": "INSUFFICIENT_CREDITS",
-                "message": "You are out of credits.",
-                "current_credits": credits,
-            },
-        )
+    else:
+        remaining = await consume_free_use(user_id)
+        if remaining < 0:
+            # race: someone else spent last credit in parallel
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "message": "You are out of credits.",
+                    "current_credits": credits,
+                },
+            )
+    
+        data["meta"]["remaining_credits"] = remaining
 
-    data["meta"]["remaining_credits"] = remaining
-
-    # 8) Save draft to DB persistence
-    # We only save if successful (which it is if we reached here)
-    # Background this? Or await? Await is safer for now to ensure it works.
     try:
+        # Determine display title: "Job Title - Resume Name or Nothing if user only uses Resume text"
+        # 1. Resume Name
+        resume_name = ""
+        if resume_file and getattr(resume_file, "filename", None):
+             resume_name = resume_file.filename
+        
+        # 2. Job Title
+        effective_job_title = data.get("job_title") or job_title or "Untitled Job"
+        
+        display_title = f"{effective_job_title} - {resume_name}"
+        
         draft_payload: Draft = {
             "user_id": user_id,
             "resume_text": resume_text,
             "job_description_text": data.get("full_text") or "",
             "job_description_context": data.get("context") or "",
-            "outputs_json": data.get("bullets") if task == "bullets" else data, # Store the whole thing or specific part? 
-            # Ideally store the result. For bullets, "bullets" key has the text.
-            # For bender, "output_json" has it.
-            # Let's standardize: store the whole 'data' minus the repetitive text fields if we want,
-            # or just store "outputs_json" as the 'data'.
-            # The schema says outputs_json is jsonb.
+            "outputs_json": {}, # Will be merged/set below
             "model_version": data["meta"].get("model") or "unknown",
             "company_name": None, # todo: extract from text?
-            "job_title": data.get("job_title") or job_title,
+            "job_title": display_title, # Set explicit display title (Job Title - ResumeName)
             "job_link": str(req.url) if req.url else None,
             "resume_label": None,
-            "bender_score": data["output_json"]["final_bender_score"] if task == "bender_score" and "output_json" in data else None
+            "bender_score": data["output_json"]["final_bender_score"] if task == "bender_score" and "output_json" in data else None,
+            "client_ref_id": client_ref_id,
         }
 
-        # Clean up data for frontend response if needed, OR just save what we have.
-        # But wait, create_draft expects 'outputs_json'.
+        # Prepare Output Payloads
+        new_output = {}
+        
         if task == "bullets":
-             draft_payload["outputs_json"] = {"bullets": data.get("bullets")}
-        elif task == "bender_score":
-             draft_payload["outputs_json"] = data.get("output_json")
-        else:
-             # generic fallback
-             draft_payload["outputs_json"] = data
+             # Extract bullets data
+             bullets_data = data.get("bullets") if isinstance(data, dict) else data
+             new_output = {"bullets": bullets_data}
+             draft_payload["resume_bullets"] = bullets_data
+             
+        elif task == "cover_letter":
+             # Extract cover letter text
+             cl_data = data
+             if isinstance(data, dict) and "cover_letter" in data:
+                  cl_data = data["cover_letter"]
+             
+             # Attempt to parse JSON string to dict for jsonb compatibility
+             if isinstance(cl_data, str):
+                 try:
+                     # Simple strip of markdown code blocks if present
+                     clean_text = cl_data.strip()
+                     if clean_text.startswith("```"):
+                         # Remove first line
+                         clean_text = clean_text.split("\n", 1)[1]
+                         # Remove last line if it is backticks
+                         if clean_text.rstrip().endswith("```"):
+                              clean_text = clean_text.rsplit("\n", 1)[0]
+                     
+                     cl_data = json.loads(clean_text)
+                 except Exception:
+                     # If parsing fails, store as-is (Postgres jsonb accepts strings too)
+                     pass
 
-        await create_draft(draft_payload)
+             new_output = {"cover_letter": cl_data}
+             draft_payload["cover_letter"] = cl_data
+             
+        elif task == "talking_points":
+             new_output = {"talking_points": data}
+             draft_payload["interview_points"] = data
+             
+        elif task == "bender_score":
+             # Store full backend payload (meta, prompt, context, output_json, etc.)
+             # in bender_score_data, similar to first_impression, and also persist
+             # the numeric final_bender_score into the bender_score column.
+             new_output = {"bender_score_data": data}
+             draft_payload["bender_score_data"] = data
+
+             # Numeric score for convenience/ordering in UI
+             if "output_json" in data:
+                  draft_payload["bender_score"] = data["output_json"].get("final_bender_score")
+                  if not draft_payload["bender_score"] and "final_bender_score" in data:
+                       draft_payload["bender_score"] = data.get("final_bender_score")
+             else:
+                  draft_payload["bender_score"] = data.get("final_bender_score")
+
+        elif task == "alignment":
+             new_output = {"alignment": data}
+             draft_payload["ats_alignment"] = data
+             
+        elif task == "first_impression":
+             new_output = {"first_impression": data}
+             draft_payload["first_impression"] = data
+
+        else:
+             new_output = {task: data}
+
+        draft_payload["outputs_json"] = new_output
+
+        if caller_provided_ref:
+            try:
+                await continue_draft(draft_payload)
+            except ValueError:
+                # First task with a caller-provided ref that does not yet exist -> create the row once
+                await create_draft(draft_payload)
+        else:
+            await create_draft(draft_payload)
+
     except Exception as e:
-        print(f"Failed to save draft: {e}")
-        # Validate if we should fail the request or just log. usually log is better for aux persistence.
-        # But user might expect it saved. Let's log for now to avoids blocking the main response.
+        print(f"CRITICAL: Failed to save draft. Error: {e}")
+        traceback.print_exc()
+        # Ensure meta exists
+        data.setdefault("meta", {})
+        data["meta"]["save_error"] = str(e)
     
     return data
 
