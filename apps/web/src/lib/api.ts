@@ -1,5 +1,6 @@
 // api.ts
 import { supabase } from '@/lib/supabaseClient'
+import { Draft } from './types';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '')
 
@@ -64,11 +65,35 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
 
   const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`
 
-  const res = await fetch(url, { ...init, headers })
-  
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, headers })
+  } catch (err) {
+    console.error('[apiFetch] Network error:', err);
+    // Return a synthetic 503 response so the app doesn't crash on null/undefined response
+    return {
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers(),
+      redirected: false,
+      type: 'error',
+      url,
+      clone: function () { return this as unknown as Response },
+      body: null,
+      bodyUsed: false,
+      arrayBuffer: async () => new ArrayBuffer(0),
+      blob: async () => new Blob([]),
+      formData: async () => new FormData(),
+      json: async () => ({ error: 'Service Unavailable' }),
+      text: async () => '',
+      data: null
+    } as ApiResponse<T>;
+  }
+
   // check status for session expiration
   if (res.status === 401) {
-    if (typeof window !== undefined ) {
+    if (typeof window !== undefined) {
       try {
         const { data } = await supabase.auth.getSession();
         const hasSession = Boolean(data.session);
@@ -94,4 +119,23 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
 
   const augmented = Object.assign(res, { data: parsed as T | null }) as ApiResponse<T>;
   return augmented;
+}
+
+export async function getHistoryList(limit = 50): Promise<Draft[]> {
+  const res = await apiFetch<Draft[]>(`/history?limit=${limit}`);
+  return res.data || [];
+}
+
+export async function getHistoryDetail(draftId: string): Promise<Draft | null> {
+  const res = await apiFetch<Draft>(`/history/${draftId}`);
+  return res.data;
+}
+
+export async function deleteHistoryDraft(draftId: string): Promise<void> {
+  const res = await apiFetch<{ success: boolean; message: string }>(`/history/${draftId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(res.data?.message || 'Failed to delete draft');
+  }
 }

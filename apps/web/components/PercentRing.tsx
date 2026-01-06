@@ -8,10 +8,15 @@ type Props = {
 };
 
 export default function PercentRing({ value, size = 64, stroke = 8, label }: Props) {
-  const pct = Math.max(0, Math.min(100, Math.round(value)));
+  // Handle NaN, undefined, null, or invalid values
+  const numValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  const pct = Math.max(0, Math.min(100, Math.round(numValue)));
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - pct / 100);
+  
+  // Ensure offset is a valid number (not NaN)
+  const safeOffset = isNaN(offset) ? 0 : offset;
 
   return (
     <div className="inline-flex flex-col items-center">
@@ -35,7 +40,7 @@ export default function PercentRing({ value, size = 64, stroke = 8, label }: Pro
           fill="none"
           strokeLinecap="round"
           strokeDasharray={c}
-          strokeDashoffset={offset}
+          strokeDashoffset={safeOffset}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
         <text

@@ -293,3 +293,43 @@ async def get_draft_detail(
     # Parse the draft data before returning
     parsed_draft = parse_draft_data(draft)
     return parsed_draft
+
+@router.delete("/{draft_id}")
+async def delete_draft(
+    draft_id: str,
+    user: Dict[str, Any] = Depends(verify_user)
+):
+    """
+    Delete a specific draft by client_ref_id (primary key).
+    Only allows deletion of drafts owned by the authenticated user.
+    """
+    user_id = user["user_id"]
+    
+    # First verify the draft exists and belongs to the user
+    params = {
+        "client_ref_id": f"eq.{draft_id}",
+        "user_id": f"eq.{user_id}",
+        "select": "client_ref_id",
+        "limit": "1",
+    }
+    
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{REST}/drafts", params=params, headers=HEADERS)
+        r.raise_for_status()
+        rows = r.json()
+        draft = rows[0] if rows else None
+    
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    # Delete the draft
+    delete_params = {
+        "client_ref_id": f"eq.{draft_id}",
+        "user_id": f"eq.{user_id}",
+    }
+    
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.delete(f"{REST}/drafts", params=delete_params, headers=HEADERS)
+        r.raise_for_status()
+    
+    return {"success": True, "message": "Draft deleted successfully"}
