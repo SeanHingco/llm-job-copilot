@@ -6,7 +6,7 @@ import SignOutButton from 'components/SignOutButton'
 import SignUpButton from 'components/SignUpButton'
 import Brand from 'components/Brand'
 import { ThemeToggle } from 'components/ThemeToggle';
-import {useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOptionalAuth } from '@/lib/hooks/useOptionalAuth';
 
 
@@ -80,14 +80,15 @@ export default function AppHeader() {
               className="absolute right-0 mt-2 w-56 rounded-xl bg-white shadow-lg ring-1 ring-black/10 p-1 z-50"
             >
               <Link href="/draft" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Application Insights</Link>
+              <Link href="/draft-history" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">History</Link>
               <Link href="/account" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Account</Link>
               <Link href="/blog" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Blog</Link>
-              <ThemeToggle/>
+              <ThemeToggle />
               <div className="my-1 h-px bg-black/10" />
               <div className="px-1 py-1">
                 {isGuest ? (
                   <SignUpButton className="w-full justify-center" />
-                ) : 
+                ) :
                   <SignOutButton className="w-full justify-center" />}
               </div>
             </div>
@@ -96,19 +97,20 @@ export default function AppHeader() {
 
         <div className="hidden md:flex items-center gap-2">
           {link('/draft', 'Application Insights', pathname)}
+          {link('/draft-history', 'History', pathname)}
           {link('/account', 'Account', pathname)}
           {link('/blog', 'Blog', pathname)}
           {/* {link('/legal/privacy', 'Privacy', pathname)}
           {link('/legal/terms', 'Terms', pathname)} */}
           {/* {link('/account/billing', 'Billing', pathname)}
           {link('/account/password', 'Password', pathname)} */}
-          <ThemeToggle/>
+          <ThemeToggle />
         </div>
         <div className="hidden md:block">
           {isGuest ? (
-            <SignUpButton/>
-          ) : 
-            <SignOutButton/>}
+            <SignUpButton />
+          ) :
+            <SignOutButton />}
         </div>
       </div>
     </header>

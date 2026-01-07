@@ -30,13 +30,18 @@ class Draft(TypedDict):
     job_description_context: str    # RAG chunks/context used for generation
     outputs_json: Dict[str, Any]
     model_version: str
-    # optional metadata
     company_name: Optional[str]
     job_title: Optional[str]
     job_link: Optional[str]
     resume_label: Optional[str]
-    bender_score: Optional[float] 
-    # created_at, updated_at handled by DB/default
+    bender_score: Optional[float]
+    bender_score_data: NotRequired[Dict[str, Any]]
+    client_ref_id: Optional[str]
+    resume_bullets: NotRequired[list]
+    interview_points: NotRequired[list]
+    cover_letter: NotRequired[str]
+    ats_alignment: NotRequired[Dict]
+    first_impression: NotRequired[Dict]
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -314,19 +319,28 @@ async def create_draft(draft: Draft) -> Dict[str, Any]:
         "job_link": draft.get("job_link"),
         "resume_label": draft.get("resume_label"),
         "bender_score": draft.get("bender_score"),
-        # created_at/updated_at default to now() in DB
+        "resume_bullets": draft.get("resume_bullets"),
+        "interview_points": draft.get("interview_points"),
+        "cover_letter": draft.get("cover_letter"),
+        "ats_alignment": draft.get("ats_alignment"),
+        "first_impression": draft.get("first_impression"),
+        "bender_score_data": draft.get("bender_score_data"),
     }
+    
+    if draft.get("client_ref_id"):
+        payload["client_ref_id"] = draft["client_ref_id"]
+    if draft.get("bender_score") is not None:
+        payload["bender_score"] = str(draft["bender_score"])
+
 
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(f"{REST}/drafts", headers=headers, json=payload)
+
         r.raise_for_status()
         rows = r.json()
         return rows[0] if rows else {}
 
 async def get_drafts(user_id: str, limit: int = 50) -> list[Dict[str, Any]]:
-    """
-    Get drafts for a user, ordered by created_at desc.
-    """
     params = {
         "user_id": f"eq.{user_id}",
         "select": "*",
@@ -337,3 +351,86 @@ async def get_drafts(user_id: str, limit: int = 50) -> list[Dict[str, Any]]:
         r = await client.get(f"{REST}/drafts", params=params, headers=HEADERS)
         r.raise_for_status()
         return r.json() or []
+
+
+async def get_draft_by_id(draft_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch a single draft by its primary key (UUID), enforcing user ownership.
+    """
+    params = {
+        "id": f"eq.{draft_id}",
+        "user_id": f"eq.{user_id}",
+        "select": "*",
+        "limit": "1",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{REST}/drafts", params=params, headers=HEADERS)
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+async def continue_draft(draft: Draft) -> Dict[str, Any]:
+    """
+    Upsert logic:
+    1. Check for existing draft by PK (client_ref_id).
+    2. If found, merge outputs_json + update specific columns via PATCH.
+    3. If not found, CREATE.
+    """
+    ref_id = draft.get("client_ref_id")
+    user_id = draft.get("user_id")
+
+    if not ref_id or not user_id:
+        return await create_draft(draft)
+
+    # 1. Search by PK
+
+    params = {
+        "client_ref_id": f"eq.{ref_id}",
+        "select": "client_ref_id, outputs_json", # Limit columns for speed
+        "limit": "1"
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{REST}/drafts", params=params, headers=HEADERS)
+        if r.status_code != 200:
+            # surface an error so the caller can decide.
+            r.raise_for_status()
+        rows = r.json()
+    
+    if rows:
+
+        # 2. Update existing
+        existing_row = rows[0]
+        
+        old_json = existing_row.get("outputs_json") or {}
+        new_json = draft.get("outputs_json") or {}
+        
+        merged_json = {**old_json, **new_json}
+        
+        patch_payload = {
+            "outputs_json": merged_json
+        }
+        
+        # Add updated structured columns if present
+        if draft.get("resume_bullets"): patch_payload["resume_bullets"] = draft["resume_bullets"]
+        if draft.get("interview_points"): patch_payload["interview_points"] = draft["interview_points"]
+        if draft.get("cover_letter"): patch_payload["cover_letter"] = draft["cover_letter"]
+        if draft.get("ats_alignment"): patch_payload["ats_alignment"] = draft["ats_alignment"]
+        if draft.get("first_impression"): patch_payload["first_impression"] = draft["first_impression"]
+        if draft.get("bender_score_data"): patch_payload["bender_score_data"] = draft["bender_score_data"]
+        
+        if draft.get("bender_score") is not None:
+             patch_payload["bender_score"] = str(draft["bender_score"])
+
+        # Patch by PK
+        params = {"client_ref_id": f"eq.{ref_id}"}
+        headers = {**HEADERS, "Prefer": "return=representation"}
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.patch(f"{REST}/drafts", params=params, headers=headers, json=patch_payload)
+
+            r.raise_for_status()
+            updated_rows = r.json()
+            return updated_rows[0] if updated_rows else {}
+            
+    else:
+        # 3. No existing row found: do NOT create a new row implicitly; return an error
+        raise ValueError(f"No draft found for client_ref_id={ref_id}")
