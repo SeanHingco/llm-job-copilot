@@ -36,7 +36,13 @@ export function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { elementTheme, setElementTheme } = useElementTheme();
 
-  const currentMode = (theme === "system" ? resolvedTheme : theme) ?? "light";
+  // Avoid hydration mismatches by only trusting resolvedTheme on the client.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
+  const currentMode = mounted
+    ? (theme === "system" ? resolvedTheme : theme) ?? "light"
+    : "light";
   const isDark = currentMode === "dark";
 
   return (

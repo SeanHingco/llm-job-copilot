@@ -776,85 +776,100 @@ const isGuest = !user;
         setUpgradeMsg(null);
         setIsGenerating(true);
         try {
+            // Use a single client_ref_id for this run so that all selected tasks
+            // are grouped into the same draft row in the database.
+            let runClientRefId: string | null = null;
+
             for (const taskToRun of selectedTasks) {
-            const fd = new FormData();
-            if (jobText) {
-              fd.append("job_text", jobText);
-            } else if (url) {
-              fd.append("url", url);
-            }
-            fd.append("task", taskToRun);
-            if (q) fd.append("q", q);
-            if (jobTitle) fd.append("job_title", jobTitle);
-            if (resumeText) {
-              fd.append("resume", resumeText);
-            } else if (resumeFile) {
-              fd.append("resume_file", resumeFile);
-            }
+                const fd = new FormData();
+                if (jobText) {
+                    fd.append("job_text", jobText);
+                } else if (url) {
+                    fd.append("url", url);
+                }
+                fd.append("task", taskToRun);
+                if (q) fd.append("q", q);
+                if (jobTitle) fd.append("job_title", jobTitle);
+                if (resumeText) {
+                    fd.append("resume", resumeText);
+                } else if (resumeFile) {
+                    fd.append("resume_file", resumeFile);
+                }
+                // If we already have a client_ref_id from a previous task in this run,
+                // send it so the backend upserts into the same draft row.
+                if (runClientRefId) {
+                    fd.append("client_ref_id", runClientRefId);
+                }
 
-            setPhase(taskToRun, "running");
+                setPhase(taskToRun, "running");
 
-            const endpoint = isGuest ? '/draft/run-form-guest' : '/draft/run-form';
+                const endpoint = isGuest ? '/draft/run-form-guest' : '/draft/run-form';
 
-            const res = await apiFetch<RunFormPayload>(endpoint, { method: 'POST', body: fd });
-            const out = res.data;
+                const res = await apiFetch<RunFormPayload>(endpoint, { method: 'POST', body: fd });
+                const out = res.data;
 
             // credits
             const nextCredits =
                 hasCreditsMeta(out) && typeof out.meta?.remaining_credits === 'number'
                     ? out.meta.remaining_credits
                     : undefined;
-            if (hasCreditsMeta(out) && typeof out.meta?.unlimited === 'boolean') {
-                setIsUnlimited(out.meta.unlimited);
-                try { localStorage.setItem('rb:is_unlimited', String(out.meta.unlimited)); } catch {}
-            }
-            if (typeof nextCredits === 'number') setCredits(nextCredits);
-            if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
+                if (hasCreditsMeta(out) && typeof out.meta?.unlimited === 'boolean') {
+                    setIsUnlimited(out.meta.unlimited);
+                    try { localStorage.setItem('rb:is_unlimited', String(out.meta.unlimited)); } catch {}
+                }
+                if (typeof nextCredits === 'number') setCredits(nextCredits);
+                if (typeof nextCredits === 'number') setCreditsCached(nextCredits);
 
-            if (res.status === 402) {
-                const err: ErrorBody = isApiError(out) ? out : {};
-                setUpgradeMsg(asText(err.detail ?? err.message ?? err.error ?? ""));
-                setGenError(errorToMessage(res.status, err));
-                setIsGenerating(false);
-                return;
-            }
-
-            if (!res.ok) {
-                const err: ErrorBody = isApiError(out) ? out : {};
-                const msg = errorToMessage(res.status, err);
-                setResults(prev => ({ ...prev, [taskToRun]: { json: null, raw: msg } }));
-                setPhase(taskToRun, "error", msg);
-                continue;
-            }
-
-            // Success path
-            let parsed: AnyJSON | null = null;
-            let raw = "";
-            if (isRunFormOk(out)) {
-                const fromKnown = out.output_json ?? null;
-                parsed = fromKnown;
-
-                if (!parsed) parsed = parseJSON(out.output);
-                if (!parsed) parsed = parseJSON(out.bullets ?? null);
-
-                // NEW: last-ditch parse if model stuffed JSON in a string with fences
-                if (!parsed && typeof out.bullets === "string") {
-                    const extracted = extractJsonFromMarkdownString(out.bullets);
-                    const normalized = normalizeAnyJSON(extracted);
-                    if (normalized) parsed = normalized;
+                if (res.status === 402) {
+                    const err: ErrorBody = isApiError(out) ? out : {};
+                    setUpgradeMsg(asText(err.detail ?? err.message ?? err.error ?? ""));
+                    setGenError(errorToMessage(res.status, err));
+                    setIsGenerating(false);
+                    return;
                 }
 
-                raw = typeof out.output === "string" ? out.output : (() => { try { return JSON.stringify(out, null, 2); } catch { return "(no output)"; } })();
-            } else {
-                try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
-            }
+                if (!res.ok) {
+                    const err: ErrorBody = isApiError(out) ? out : {};
+                    const msg = errorToMessage(res.status, err);
+                    setResults(prev => ({ ...prev, [taskToRun]: { json: null, raw: msg } }));
+                    setPhase(taskToRun, "error", msg);
+                    continue;
+                }
 
-                    setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
-                    setPhase(taskToRun, "done");
-                    maybeShowReferralNudge();
-                    if (isGuest) {
-                      maybeShowGuestSignupNudge(taskToRun);
+                // Success path
+                let parsed: AnyJSON | null = null;
+                let raw = "";
+                if (isRunFormOk(out)) {
+                    const fromKnown = out.output_json ?? null;
+                    parsed = fromKnown;
+
+                    if (!parsed) parsed = parseJSON(out.output);
+                    if (!parsed) parsed = parseJSON(out.bullets ?? null);
+
+                    // NEW: last-ditch parse if model stuffed JSON in a string with fences
+                    if (!parsed && typeof out.bullets === "string") {
+                        const extracted = extractJsonFromMarkdownString(out.bullets);
+                        const normalized = normalizeAnyJSON(extracted);
+                        if (normalized) parsed = normalized;
                     }
+
+                    raw = typeof out.output === "string" ? out.output : (() => { try { return JSON.stringify(out, null, 2); } catch { return "(no output)"; } })();
+                } else {
+                    try { raw = JSON.stringify(out, null, 2); } catch { raw = "(no output)"; }
+                }
+
+                // Capture client_ref_id from the first successful task so we can reuse it.
+                const outMeta = (out as { meta?: { client_ref_id?: string } })?.meta;
+                if (!runClientRefId && outMeta?.client_ref_id) {
+                    runClientRefId = String(outMeta.client_ref_id);
+                }
+
+                setResults(prev => ({ ...prev, [taskToRun]: { json: parsed, raw } }));
+                setPhase(taskToRun, "done");
+                maybeShowReferralNudge();
+                if (isGuest) {
+                    maybeShowGuestSignupNudge(taskToRun);
+                }
             }
         } catch (e: unknown) {
             setGenError(errToString(e));
@@ -1267,7 +1282,7 @@ const isGuest = !user;
                         </div>
 
                         <div className="space-y-2">
-                          <label htmlFor="job_title" className={labelBase}>Job title (optional)</label>
+                          <label htmlFor="job_title" className={labelBase}>Job title (required)</label>
                           <input
                               id="job_title"
                               name="job_title"
