@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 // import AppHeader from "components/AppHeader";
 import HeaderGate from "components/HeaderGate";
 import Footer from "components/Footer"
+import { ElementalBackground } from "components/ElementalBackground";
 // import Head from "next/head";
 
 const geistSans = Geist({
@@ -62,17 +63,22 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased noise`}
       >
+        
         <ThemeProvider
           attribute="class"       // uses class="dark"
           defaultTheme="system"   // follow OS by default
           enableSystem
           disableTransitionOnChange
         >
-          <HeaderGate />
-          {children}
-          <Footer />
+          <div className="relative z-10">
+            <HeaderGate />
+            <ElementalBackground />
+            {children}
+            <Footer />
+            
+          </div>
         </ThemeProvider>
       </body>
     </html>

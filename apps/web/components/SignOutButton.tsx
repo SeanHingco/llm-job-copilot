@@ -22,7 +22,7 @@ export default function SignOutButton({ className = '' }: { className?: string }
         <button
             onClick={onClick}
             disabled={loading}
-            className={`rounded-lg bg-neutral-200 px-3 py-1.5 text-gray-500 text-sm hover:bg-neutral-300 disabled:opacity-50 ${className}`}
+            className={`rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm hover:bg-muted disabled:opacity-50 ${className}`}
         >
             {loading ? 'Signing out…' : 'Sign out'}
         </button>

@@ -64,7 +64,7 @@ export default function BulletsView({ data }: { data: unknown }): ReactNode | nu
       </div>
 
       {bullets.map((b, i) => (
-        <article key={i} className="rounded-xl border bg-background p-4 shadow-sm">
+        <article key={i} className="rounded-xl border bg-card p-4 shadow-sm">
           <div className="flex items-start gap-2">
             <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-background" />
             <div className="flex-1">
@@ -83,17 +83,17 @@ export default function BulletsView({ data }: { data: unknown }): ReactNode | nu
               {(b.keywords?.length || b.job_chunks?.length || b.transferable) && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {b.keywords?.map((k, idx) => (
-                    <span key={idx} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                    <span key={idx} className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground border border-border">
                       {k}
                     </span>
                   ))}
                   {b.job_chunks?.length ? (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
+                    <span className="rounded-full bg-info/10 px-2 py-0.5 text-[11px] text-info border border-info/20">
                       refs: [{b.job_chunks.join(",")}]
                     </span>
                   ) : null}
                   {b.transferable ? (
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800">
+                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success border border-success/20">
                       transferable
                     </span>
                   ) : null}

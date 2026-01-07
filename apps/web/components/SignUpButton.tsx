@@ -22,7 +22,7 @@ export default function SignUpButton({ className = '' }: { className?: string })
         <button
             onClick={onClick}
             disabled={loading}
-            className={`rounded-lg bg-neutral-200 px-3 py-1.5 text-gray-500 text-sm hover:bg-neutral-300 disabled:opacity-50 ${className}`}
+            className={`rounded-lg bg-primary px-3 py-1.5 text-sm text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 ${className}`}
         >
             {loading ? 'Taking to Sign Up…' : 'Sign Up'}
         </button>

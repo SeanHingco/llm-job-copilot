@@ -97,7 +97,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
   return (
     <div className="space-y-4">
       {/* Strengths */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Strengths</h3>
         <ul className="space-y-3">
           {d.strengths?.map((s, i) => (
@@ -111,7 +111,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
       </section>
 
       {/* Gaps */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Gaps & Mitigations</h3>
         <ul className="space-y-3">
           {d.gaps?.map((g, i) => (
@@ -125,7 +125,7 @@ export default function TalkingPlaybookView({ data }: { data: TalkingPlaybookJSO
       </section>
 
       {/* Interview questions */}
-      <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Likely Interview Questions</h3>
         <ul className="space-y-3">
           {d.interview_questions?.map((q, i) => (

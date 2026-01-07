@@ -153,7 +153,7 @@ export default function AlignmentView({ data }: { data: AlignJSON | string | { b
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-foreground mb-2">Strengths</h4>
+          <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">Strengths</h4>
           <ul className="space-y-2">
             {strengths.map((s, i) => (
               <li key={`str-${i}`} className="text-sm text-muted-foreground">
@@ -167,7 +167,7 @@ export default function AlignmentView({ data }: { data: AlignJSON | string | { b
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <h4 className="text-sm font-semibold text-foreground mb-2">Gaps</h4>
+          <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-2">Gaps</h4>
           <ul className="space-y-2">
             {gaps.map((g, i) => (
               <li key={`gap-${i}`} className="text-sm text-muted-foreground">

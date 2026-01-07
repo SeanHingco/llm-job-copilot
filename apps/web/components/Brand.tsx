@@ -8,8 +8,8 @@ export default function Brand({ className = "", textClassName = "text-foreground
       <Image
         src="/favicon-64x64.png"            // or "/logo.png"
         alt="Resume Bender"
-        width={48}
-        height={48}
+        width={56}
+        height={56}
         priority
       />
       <span className={`font-semibold tracking-tight ${textClassName}`}>Resume Bender</span>
