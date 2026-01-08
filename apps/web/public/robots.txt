@@ -1,0 +1,14 @@
+# *
+User-agent: *
+Allow: /
+
+# *
+User-agent: *
+Disallow: /api/
+Disallow: /admin/
+
+# Host
+Host: https://resume-bender.seanhing.co
+
+# Sitemaps
+Sitemap: https://resume-bender.seanhing.co/sitemap.xml

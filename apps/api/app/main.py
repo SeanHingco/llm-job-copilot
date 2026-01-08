@@ -10,6 +10,7 @@ from .routers import ingest
 from .routers import draft
 from .routers import resume
 from .routers import analytics
+from .routers import history
 from .routers import agentic_v3
 from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
@@ -596,3 +597,5 @@ app.include_router(analytics.router)
 app.include_router(referral.router)
 
 app.include_router(agentic_v3.router)
+
+app.include_router(history.router)
