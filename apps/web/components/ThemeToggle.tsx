@@ -2,52 +2,23 @@
 
 import { useTheme } from "next-themes";
 import * as React from "react";
-
-type ElementTheme = "default" | "fire" | "water" | "earth" | "air";
-const KEY = "rb_element_theme";
-
-export function useElementTheme() {
-  const [elementTheme, setElementThemeState] = React.useState<ElementTheme>("default");
-
-  // load on mount
-  React.useEffect(() => {
-    const saved = (localStorage.getItem(KEY) as ElementTheme | null) ?? "default";
-    setElementThemeState(saved);
-    const root = document.documentElement;
-    if (saved === "default") delete root.dataset.theme;
-    else root.dataset.theme = saved;
-  }, []);
-
-  // setter that updates DOM + localStorage
-  const setElementTheme = React.useCallback((t: ElementTheme) => {
-    setElementThemeState(t);
-    localStorage.setItem(KEY, t);
-    const root = document.documentElement;
-    if (t === "default") delete root.dataset.theme;
-    else root.dataset.theme = t;
-  }, []);
-
-  return { elementTheme, setElementTheme };
-}
-
-
+import { useElementTheme, type ElementTheme } from "components/ElementThemeProvider";
 
 export function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { elementTheme, setElementTheme } = useElementTheme();
 
-  // Avoid hydration mismatches by only trusting resolvedTheme on the client.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
   const currentMode = mounted
     ? (theme === "system" ? resolvedTheme : theme) ?? "light"
     : "light";
+
   const isDark = currentMode === "dark";
 
   return (
     <div className="inline-flex items-center gap-2">
-      {/* Light / Dark */}
       <button
         type="button"
         onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -58,7 +29,6 @@ export function ThemeToggle() {
         <span>{isDark ? "Dark" : "Light"}</span>
       </button>
 
-      {/* Element palette */}
       <select
         value={elementTheme}
         onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>

@@ -12,6 +12,7 @@ from .routers import resume
 from .routers import analytics
 from .routers import history
 from .routers import agentic_v3
+from .routers import applications
 from .utils.pricing import PRICE_CATALOG, resolve_subscription_by_price_id
 from .utils.credits import ensure_daily_free_topup
 from .utils.security_headers import SecurityHeadersMiddleware
@@ -102,7 +103,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"],
+    expose_headers=["x-request-id"],
     max_age=3600,
 )
 
@@ -110,12 +111,14 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 @app.middleware("http")
 async def add_request_id_and_log(request: Request, call_next):
-    rid = request.headers.get("x-request-id", str(uuid.uuid4()))
+    rid = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = rid
     start = time.time()
+
     response: Response = await call_next(request)
-    response.headers["X-Request-ID"] = rid
+    response.headers["x-request-id"] = rid
     log = {
-        "level": "info",
+       "level": "info",
         "msg": "request",
         "request_id": rid,
         "method": request.method,
@@ -599,3 +602,5 @@ app.include_router(referral.router)
 app.include_router(agentic_v3.router)
 
 app.include_router(history.router)
+
+app.include_router(applications.router)

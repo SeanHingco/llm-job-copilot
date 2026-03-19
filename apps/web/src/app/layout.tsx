@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import HeaderGate from "components/HeaderGate";
 import Footer from "components/Footer"
 import { ElementalBackground } from "components/ElementalBackground";
+import { ElementThemeProvider } from "components/ElementThemeProvider";
 // import Head from "next/head";
 
 const geistSans = Geist({
@@ -25,9 +26,9 @@ export const metadata: Metadata = {
   manifest: "/site.webmanifest",
   icons: {
     icon: [
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon.ico" },
+      { url: "/default/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/default/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/default/favicon.ico" },
     ],
     apple: "/apple-touch-icon.png",
     shortcut: "/favicon.ico",
@@ -72,13 +73,15 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="relative z-10">
-            <HeaderGate />
-            <ElementalBackground />
-            {children}
-            <Footer />
-            
-          </div>
+          <ElementThemeProvider>
+            <div className="relative z-10">
+              <HeaderGate />
+              <ElementalBackground />
+              {children}
+              <Footer />
+              
+            </div>
+          </ElementThemeProvider>
         </ThemeProvider>
       </body>
     </html>

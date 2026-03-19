@@ -81,6 +81,7 @@ export default function AppHeader() {
             >
               <Link href="/draft" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Application Insights</Link>
               <Link href="/draft-history" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">History</Link>
+              <Link href="/applications" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Applications</Link>
               <Link href="/account" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Account</Link>
               <Link href="/blog" role="menuitem" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-neutral-500 hover:bg-black/5">Blog</Link>
               <ThemeToggle />
@@ -97,6 +98,7 @@ export default function AppHeader() {
 
         <div className="hidden md:flex items-center gap-2">
           {link('/draft', 'Application Insights', pathname)}
+          {link('/applications', 'Applications', pathname)}
           {link('/draft-history', 'History', pathname)}
           {link('/account', 'Account', pathname)}
           {link('/blog', 'Blog', pathname)}
