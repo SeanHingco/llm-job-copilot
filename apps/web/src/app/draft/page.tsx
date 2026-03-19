@@ -129,6 +129,24 @@ type ApiError = {
   current_credits?: number;
 };
 
+type TrackerApplication = {
+  id: string;
+  company_name?: string | null;
+  job_title?: string | null;
+  job_link?: string | null;
+  status?: string;
+};
+
+type TrackerDraft = {
+  id: string;
+  client_ref_id?: string | null;
+};
+
+type CreateApplicationFromDraftResponse = {
+  application: TrackerApplication;
+  draft: TrackerDraft;
+};
+
 export type RunFormPayload = RunFormOk | ApiError;
 
 export type AccountCreditsResponse = {
@@ -910,7 +928,7 @@ const isGuest = !user;
               setTrackerSaveMsg("Saving to Job Tracker...");
 
               try {
-                const r = await apiFetch<{ application: any; draft: any }>(
+                const r = await apiFetch<CreateApplicationFromDraftResponse>(
                   "/applications/from-draft",
                   {
                     method: "POST",

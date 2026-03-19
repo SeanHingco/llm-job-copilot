@@ -51,6 +51,12 @@ function fmtDate(s?: string | null) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function getErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return "Something went wrong";
+}
+
 async function loadApplications(limit: number, status?: ApplicationStatus) {
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
@@ -117,9 +123,9 @@ export default function ApplicationsPage() {
     try {
       const data = await loadApplications(200, statusFilter === "all" ? undefined : statusFilter);
       setApps(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setErr(e?.message || "Failed to load applications");
+      setErr(getErrorMessage(e) || "Failed to load applications");
     } finally {
       setLoading(false);
     }
@@ -146,10 +152,9 @@ export default function ApplicationsPage() {
       if (updated?.id) {
         setApps((prev) => prev.map((a) => (a.id === id ? updated : a)));
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setErr(e?.message || "Failed to update status");
-      // rollback by reloading (simple MVP)
+      setErr(getErrorMessage(e) || "Failed to update status");
       await refresh();
     } finally {
       setSavingId(null);
@@ -171,8 +176,7 @@ export default function ApplicationsPage() {
         await deleteApplication(id);
     } catch (e: any) {
         console.error(e);
-        setErr(e?.message || "Failed to delete application");
-        // rollback
+        setErr(getErrorMessage(e) || "Failed to delete application");
         setApps(prev);
     } finally {
         setDeletingId(null);
@@ -199,7 +203,9 @@ export default function ApplicationsPage() {
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as ApplicationStatus | "all")
+            }
             className="h-10 rounded-md border border-border bg-background px-3 text-sm"
           >
             <option value="all">All statuses</option>
