@@ -15,6 +15,8 @@ from app.routers.resume import extract_resume as extract_route
 from app.agents.bender_score import run_bender_score_agent
 from app.agents.domain.first_impression import first_impression_domain
 from app.agents.schemas.first_impression_schema import FirstImpressionInput
+from app.agents.domain.bullets import bullets_domain
+from app.agents.schemas.bullets_schema import BulletsInput
 
 from app.auth import verify_supabase_session as verify_user
 from app.supabase_db import get_user_summary, consume_free_use, insert_analytics_event, create_draft, get_drafts, Draft
@@ -141,7 +143,7 @@ async def _run_generation(req: DraftReq) -> dict:
     ingest_payload = IngestRequest(
         url=str(req.url) if req.url is not None else "",
         q=req.q,
-        text=req.job_text or None,   # NEW: allow pasted JD
+        text=req.job_text or None,
     )
     result = await ingest_route(ingest_payload)
 
@@ -168,13 +170,23 @@ async def _run_generation(req: DraftReq) -> dict:
 
         if not resume_text:
             raise HTTPException(
-                status_code=400,
-                detail="Could not read your resume. Paste text or upload a file.",
-            )
+                    status_code=400,
+                    detail={
+                        "code": "RESUME_UNREADABLE",
+                        "stage": "resume_extract",
+                        "message": "Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text.",
+                        "retryable": False,
+                    },
+        )
         if not job_text:
             raise HTTPException(
                 status_code=400,
-                detail="Provide a job URL or paste the job description to compute Bender Score.",
+                detail={
+                    "code": "JOB_SOURCE_UNREADABLE",
+                    "stage": "job_source_extract",
+                    "message": "Provide a job URL or paste the job description to compute Bender Score.",
+                    "retryable": False,
+                },
             )
 
         # Run the LangChain agent
@@ -243,6 +255,46 @@ async def _run_generation(req: DraftReq) -> dict:
             "context": context,
             "job_title": job_title,
         }
+    
+    if req.task == "bullets":
+        job_text = (req.job_text or "").strip() or context
+        resume_text = (req.resume or "").strip()
+
+        if not resume_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read your resume. Paste text or upload a file.",
+            )
+        if not job_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide a job URL or paste the job description to generate bullets.",
+            )
+
+        bullets_input = BulletsInput(
+            job_title=job_title,
+            job_text=job_text,
+            resume_text=resume_text,
+            strict_mode=False,
+            include_ats_skill_match=True,   # keep on for now
+            # (optional) you can pass scans if you already computed them elsewhere later
+        )
+
+        bullets_res = bullets_domain(bullets_input)
+
+        return {
+            "output_json": bullets_res.model_dump(),
+            "prompt": "",  # not using template prompt anymore
+            "meta": {
+                "task": "bullets",
+                "final_url": result.get("final_url"),
+            },
+            # for persistence / draft saving
+            "full_text": result.get("full_text"),
+            "context": context,
+            "job_title": job_title,
+        }
+
 
 
     template = load_task_template(req.task)
@@ -413,7 +465,16 @@ async def draft_run(
         data = await _run_generation(req=req)
     except Exception as e:
         # generate_text raises RuntimeError with helpful details; surface them
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+       raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "LLM_FAILED",
+                "stage": "llm",
+                "message": "We couldn’t generate your draft right now. Please try again.",
+                "retryable": True,
+                "details": {"provider_error": str(e)[:300]},
+            },
+        )
 
     # After generation, either spend a credit (normal) or skip (free mode)
     if not FREE_MODE:
@@ -481,9 +542,12 @@ async def draft_run_form_guest(
             status_code=429,
             detail={
                 "code": "RATE_LIMITED",
-                "message": "You’ve hit the limit for guest runs. Create a free account to keep using Bullets.",
-                "retry_after": retry_after,
+                "stage": "rate_limit",
+                "message": "Too many requests. Please try again shortly.",
+                "retryable": True,
+                "retry_after": retry,
             },
+            headers={"Retry-After": str(retry)},
         )
 
     # 4) If a resume file is provided, extract text like your normal flow
@@ -508,7 +572,16 @@ async def draft_run_form_guest(
             job_text=job_text,
         )
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "stage": "validation",
+                "message": "Some fields were invalid. Please check your inputs and try again.",
+                "retryable": False,
+                "issues": e.errors(),
+            },
+        )
 
     try:
         data = await _run_generation(req=req)
@@ -545,6 +618,7 @@ async def draft_run_form(
     request: Request,
     url: Optional[str] = Form(None),         # was: HttpUrl = Form(...)
     q: Optional[str] = Form(None),
+    company_name: Optional[str] = Form(None),   # NEW
     job_title: Optional[str] = Form(None),
     resume: Optional[str] = Form(""),
     resume_file: UploadFile | None = File(None),
@@ -626,19 +700,34 @@ async def draft_run_form(
     if not resume_text:
         raise HTTPException(
             status_code=400,
-            detail="Could not read your resume. Paste text or upload a file.",
+            detail={
+                "code": "RESUME_UNREADABLE",
+                "stage": "resume_extract",
+                "message": "Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text.",
+                "retryable": False,
+            },
         )
 
     if not _is_readable(resume_text):
         raise HTTPException(
             status_code=400,
-            detail="Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text.",
+            detail={
+                "code": "RESUME_UNREADABLE",
+                "stage": "resume_extract",
+                "message": "Could not read your resume. Please upload a text-based PDF (not a scan) or paste the text.",
+                "retryable": False,
+            },
         )
 
     if not (job_text and job_text.strip()) and not (url and url.strip()):
         raise HTTPException(
             status_code=400,
-            detail="Provide a job URL or paste the job description.",
+            detail={
+                "code": "JOB_SOURCE_UNREADABLE",
+                "stage": "job_source_extract",
+                "message": "Provide a job URL or paste the job description.",
+                "retryable": False,
+            },
         )
     url_for_req: Optional[str] = url if not (job_text and job_text.strip()) else None
 
@@ -655,6 +744,7 @@ async def draft_run_form(
         task=task,
         url=url_for_req,
         q=q,
+        company_name=company_name,
         job_title=job_title,
         resume=resume_text,
         job_text=job_text,
@@ -837,6 +927,12 @@ async def draft_run_form(
         # Ensure meta exists
         data.setdefault("meta", {})
         data["meta"]["save_error"] = str(e)
+        data.setdefault("warnings", [])
+        data["warnings"].append({
+            "code": "DRAFT_SAVE_FAILED",
+            "stage": "persist",
+            "message": "Your draft was generated, but we couldn’t save it to history.",
+        })
     
     return data
 

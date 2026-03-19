@@ -290,36 +290,37 @@ function looksBulletsV2(j: unknown): boolean {
   const rich = arr.some(
     (b) => isObject(b) && ("evidence" in b || "keywords" in b || "rationale" in b || "transferable" in b)
   );
-  return (arr.some(isV2Bullet) && rich) || hasAtsSummary(j);
+  return (arr.some(isV2Bullet) && rich) || hasAtsSummary(j) || hasAtsSkillMatch(j);
+
 }
 
 function getAtsCoveragePercent(j: unknown): number | null {
   if (!isObject(j)) return null;
 
   const a =
+    (j as Record<string, unknown>)["ats_skill_match"] ??
     (j as Record<string, unknown>)["ats_summary"] ??
     (j as Record<string, unknown>)["atsSummary"];
+
   if (!isObject(a)) return null;
 
-  const d =
-    (a as Record<string, unknown>)["coverage_detail"] ??
-    (a as Record<string, unknown>)["coverageDetail"];
-  if (!isObject(d)) return null;
-
-  let rateRaw =
-    (d as Record<string, unknown>)["coverage_rate"] ??
-    (d as Record<string, unknown>)["coverageRate"];
-
-  if (typeof rateRaw === "string") {
-    const n = Number(rateRaw);
-    if (!Number.isFinite(n)) return null;
-    rateRaw = n;
+  // NEW: AtsMatchResult path
+  if (typeof a["ats_score"] === "number") {
+    const score = a["ats_score"] as number;
+    const pct = Math.round(Math.max(0, Math.min(1, score)) * 100);
+    return pct;
   }
-  if (typeof rateRaw !== "number") return null;
 
-  const pct = rateRaw > 1 ? rateRaw : rateRaw * 100; // accept 0..1 or 0..100
-  return Math.max(0, Math.min(100, Math.round(pct)));
+  // OLD: ATS summary path (if you still support it)
+  const cd = a["coverage_detail"];
+  if (isObject(cd) && typeof cd["coverage_rate"] === "number") {
+    const pct = Math.round(Math.max(0, Math.min(1, cd["coverage_rate"] as number)) * 100);
+    return pct;
+  }
+
+  return null;
 }
+
 
 
 
@@ -434,13 +435,42 @@ function hasAtsSummary(j: unknown): j is {
   };
 } {
   if (!isObject(j)) return false;
-  const a = j["ats_summary"];
+  const a =
+    (j as Record<string, unknown>)["ats_summary"] ??
+    (j as Record<string, unknown>)["atsSummary"];
   if (!isObject(a)) return false;
   // Light checks (optional fields allowed)
   if (a["covered_keywords"] !== undefined && !isStringArray(a["covered_keywords"])) return false;
   if (a["missing_keywords"] !== undefined && !isStringArray(a["missing_keywords"])) return false;
   return true;
 }
+
+function hasAtsSkillMatch(j: unknown): j is {
+  ats_skill_match: {
+    ats_score: number; // 0..1
+    matched_skills?: string[];
+    missing_must_have_skills?: string[];
+    missing_nice_to_have_skills?: string[];
+    extra_resume_skills?: string[];
+    explanation?: string;
+  };
+} {
+  if (!isObject(j)) return false;
+  const a = (j as Record<string, unknown>)["ats_skill_match"];
+  if (!isObject(a)) return false;
+
+  if (typeof a["ats_score"] !== "number") return false;
+
+  if (a["matched_skills"] !== undefined && !isStringArray(a["matched_skills"])) return false;
+  if (a["missing_must_have_skills"] !== undefined && !isStringArray(a["missing_must_have_skills"])) return false;
+  if (a["missing_nice_to_have_skills"] !== undefined && !isStringArray(a["missing_nice_to_have_skills"])) return false;
+  if (a["extra_resume_skills"] !== undefined && !isStringArray(a["extra_resume_skills"])) return false;
+  if (a["explanation"] !== undefined && typeof a["explanation"] !== "string") return false;
+
+  return true;
+}
+
+
 
 function asStringArray(u: unknown): u is string[] {
   return Array.isArray(u) && u.every((x) => typeof x === "string");
@@ -581,6 +611,9 @@ export default function DraftPage() {
     const [premium, setPremium] = useState<{active:boolean; expires_at?:string; days_left?:number} | null>(null);
     const [showReferralPrompt, setShowReferralPrompt] = useState(false);
     const [showGuestSignupPrompt, setShowGuestSignupPrompt] = useState(false);
+    const [trackerSaveMsg, setTrackerSaveMsg] = useState<string | null>(null);
+    const [isSavingTracker, setIsSavingTracker] = useState(false);
+    const [companyName, setCompanyName] = useState<string>("");
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data }) => {
@@ -789,6 +822,7 @@ const isGuest = !user;
                 }
                 fd.append("task", taskToRun);
                 if (q) fd.append("q", q);
+                if (companyName) fd.append("company_name", companyName);
                 if (jobTitle) fd.append("job_title", jobTitle);
                 if (resumeText) {
                     fd.append("resume", resumeText);
@@ -870,6 +904,43 @@ const isGuest = !user;
                 if (isGuest) {
                     maybeShowGuestSignupNudge(taskToRun);
                 }
+            }
+            if (!isGuest && runClientRefId) {
+              setIsSavingTracker(true);
+              setTrackerSaveMsg("Saving to Job Tracker...");
+
+              try {
+                const r = await apiFetch<{ application: any; draft: any }>(
+                  "/applications/from-draft",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      draft_id: runClientRefId,
+                      // optional best-effort
+                      company_name: companyName || undefined,
+                      job_title: jobTitle || undefined,
+                      job_link: url || undefined,
+                      // you don't currently collect company_name, so omit for now
+                      status: "drafting",
+                    }),
+                  }
+                );
+
+                if (r.ok) {
+                  setTrackerSaveMsg("Saved to Job Tracker ✓");
+                  // optional: store created app id if you want a deep link later
+                  // const appId = r.data?.application?.id;
+                } else {
+                  setTrackerSaveMsg(null);
+                  console.warn("Tracker save failed:", r.status, r.data);
+                }
+              } catch (err) {
+                console.warn("Tracker save threw:", err);
+                setTrackerSaveMsg(null);
+              } finally {
+                setIsSavingTracker(false);
+              }
             }
         } catch (e: unknown) {
             setGenError(errToString(e));
@@ -1282,6 +1353,19 @@ const isGuest = !user;
                         </div>
 
                         <div className="space-y-2">
+                          <label htmlFor="company_name" className={labelBase}>Company name (required)</label>
+                          <input
+                            id="company_name"
+                            name="company_name"
+                            type="text"
+                            placeholder="Company"
+                            className={inputBase}
+                            value={companyName}
+                            onChange={(e) => setCompanyName(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
                           <label htmlFor="job_title" className={labelBase}>Job title (required)</label>
                           <input
                               id="job_title"
@@ -1544,37 +1628,60 @@ const isGuest = !user;
                                         <>
                                             <BulletsView data={j} />
                                             {/* Optional: keep ATS summary visible under the cards */}
-                                            {hasAtsSummary(j) && (
-                                            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                                                <div className="flex items-start gap-4">
-                                                {/* Ring (always try; render only if we have a number) */}
-                                                {(() => {
-                                                    const pct = getAtsCoveragePercent(j);
-                                                    // optional debug:
-                                                    // console.log("[draft] ATS coverage pct:", pct);
-                                                    return pct !== null ? <PercentRing value={pct} label="ATS coverage" /> : null;
-                                                })()}
+                                            {(() => {
+                                              if (!hasAtsSkillMatch(j)) return null;
+                                              const a = j.ats_skill_match;
 
-                                                <div className="flex-1">
-                                                    <h3 className="mb-1 text-sm font-semibold text-foreground">ATS summary</h3>
-                                                    <div className="text-sm text-muted-foreground space-y-1">
-                                                    {j.ats_summary.covered_keywords?.length ? (
-                                                        <div>
-                                                        <span className="font-medium">Covered:</span>{" "}
-                                                        {j.ats_summary.covered_keywords.join(", ")}
-                                                        </div>
-                                                    ) : null}
-                                                    {j.ats_summary.missing_keywords?.length ? (
-                                                        <div>
-                                                        <span className="font-medium">Missing:</span>{" "}
-                                                        {j.ats_summary.missing_keywords.join(", ")}
-                                                        </div>
-                                                    ) : null}
+                                              return (
+                                                <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                                                  <div className="flex items-start gap-4">
+                                                    {(() => {
+                                                      const pct = getAtsCoveragePercent(j);
+                                                      return pct !== null ? <PercentRing value={pct} label="ATS coverage" /> : null;
+                                                    })()}
+
+                                                    <div className="flex-1">
+                                                      <h3 className="mb-1 text-sm font-semibold text-foreground">ATS summary</h3>
+
+                                                      {a.explanation ? (
+                                                        <p className="text-sm text-muted-foreground mb-2">{a.explanation}</p>
+                                                      ) : null}
+
+                                                      <div className="text-sm text-muted-foreground space-y-2">
+                                                        {a.matched_skills?.length ? (
+                                                          <div>
+                                                            <span className="font-medium">Matched must-haves:</span>{" "}
+                                                            {a.matched_skills.join(", ")}
+                                                          </div>
+                                                        ) : null}
+
+                                                        {a.missing_must_have_skills?.length ? (
+                                                          <div>
+                                                            <span className="font-medium">Missing must-haves:</span>{" "}
+                                                            {a.missing_must_have_skills.join(", ")}
+                                                          </div>
+                                                        ) : null}
+
+                                                        {a.missing_nice_to_have_skills?.length ? (
+                                                          <div>
+                                                            <span className="font-medium">Missing nice-to-haves:</span>{" "}
+                                                            {a.missing_nice_to_have_skills.join(", ")}
+                                                          </div>
+                                                        ) : null}
+
+                                                        {a.extra_resume_skills?.length ? (
+                                                          <div>
+                                                            <span className="font-medium">Extra resume skills:</span>{" "}
+                                                            {a.extra_resume_skills.join(", ")}
+                                                          </div>
+                                                        ) : null}
+                                                      </div>
                                                     </div>
+                                                  </div>
                                                 </div>
-                                                </div>
-                                            </div>
-                                            )}
+                                              );
+                                            })()}
+
                                         </>
                                         ) : (
                                         <pre className="whitespace-pre-wrap rounded-xl border border-border bg-card p-4 text-sm font-mono text-foreground">
