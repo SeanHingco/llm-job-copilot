@@ -174,10 +174,10 @@ export default function ApplicationsPage() {
 
     try {
         await deleteApplication(id);
-    } catch (e: any) {
-        console.error(e);
-        setErr(getErrorMessage(e) || "Failed to delete application");
-        setApps(prev);
+    } catch (e: unknown) {
+      console.error(e);
+      setErr(getErrorMessage(e) || "Failed to delete application");
+      setApps(prev);
     } finally {
         setDeletingId(null);
     }
